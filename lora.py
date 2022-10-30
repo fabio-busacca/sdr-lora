@@ -4,10 +4,14 @@ import scipy.io
 import numpy as np
 
 
-#############CONSTANTS DEFINITION#####################
-Trise = 50e-6
+#############CONSTANTS#####################
+# rising and falling edges duration
+Trise = 50e-6  
+# Carrier Frequency Offset as declared in the datasheet
 Cfo_PPM = 17
+# Receiver Noise Figure
 NF_dB = 6
+#Minimum duration for a LoRa packet
 min_time_lora_packet = 20e-3 #20 milliseconds
 
 
@@ -16,11 +20,17 @@ min_time_lora_packet = 20e-3 #20 milliseconds
 
 
 
+
 def lora_packet(BW, OSF, SF, k1, k2, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, MESSAGE, Trise, t0_frac, phi0):
+    # in our implementation, the payload includes a 4 byte pseudo-header: (SRC, DST, SEQNO, LENGTH)
     LENGTH = np.uint16(4 + (MESSAGE.size))
+
+    # n_sym_hdr: number of chirps encoding the header (0 if IH: True)
+    # n_bits_hdr: [bit DI PAYLOAD presenti nell'header CHIEDERE A STEFANO]
     (n_sym_hdr, n_bits_hdr) = lora_header_init(SF, IH)
     [PAYLOAD, n_sym_payload] = lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESSAGE)
 
+    # -------------------------------------------------BIT TO SYMBOL MAPPING
     payload_ofs = 0
     if IH:
         k_hdr = []
@@ -29,29 +39,38 @@ def lora_packet(BW, OSF, SF, k1, k2, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, MES
 
     k_payload = lora_payload(SF, CR, n_sym_payload, PAYLOAD, payload_ofs)
 
+    # --------------------------------- CSS MODULATION
 
+    # number of samples per chirp
     K = np.power(2, SF)
     N = int(K * OSF)
+    # number of samples in the rising/falling edge
     Nrise = int(np.ceil(Trise * BW * OSF))
 
+    # preamble modulation
     (p, phi) = lora_preamble(n_pr, k1, k2, BW, K, OSF, t0_frac, phi0)
 
+    # samples initialization
     s = np.concatenate((np.zeros(Nrise), p, np.zeros(N * (n_sym_hdr + n_sym_payload) + Nrise)))
 
+    # rising edge samples
     s[0:Nrise] = p[N - 1 + np.arange(-Nrise + 1, 1, dtype=np.int16)] * np.power(
         np.sin(np.pi / 2 * np.arange(1, Nrise + 1) / Nrise), 2)
     s_ofs = p.size + Nrise
 
+    # header modulation, if any
     for sym in range(0, n_sym_hdr):
         k = k_hdr[sym]
         (s[s_ofs + np.arange(0, N)], phi) = lora_chirp(+1, k, BW, K, OSF, t0_frac, phi)
         s_ofs = s_ofs + N
 
+    # payload modulation
     for sym in range(0, n_sym_payload):
         k = k_payload[sym]
         (s[s_ofs + np.arange(0, N)], phi) = lora_chirp(+1, k, BW, K, OSF, t0_frac, phi)
         s_ofs = s_ofs + N
 
+    # falling edge samples
     s[s_ofs + np.arange(0, Nrise)] = s[s_ofs + np.arange(0, Nrise)] * np.power(
         np.cos(np.pi / 2 * np.arange(0, Nrise) / Nrise), 2)
 
@@ -64,6 +83,7 @@ def lora_header_init(SF, IH):
         n_sym_hdr = np.uint16(0)
         n_bits_hdr = np.uint16(0)
     else:
+        # interleaving block size, respectively for header & payload
         CR_hdr = np.uint16(4)
         DE_hdr = np.uint16(1)
         n_sym_hdr = 4 + CR_hdr
@@ -73,7 +93,9 @@ def lora_header_init(SF, IH):
     return n_sym_hdr, n_bits_hdr
 
 
+# function [k_hdr,payload_ofs] =
 def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
+    # header parity check matrix (reverse engineered through brute force search)
 
     header_FCS = np.array(([1, 1, 0, 0, 0], [1, 0, 1, 0, 0], [1, 0, 0, 1, 0], [1, 0, 0, 0, 1], [0, 1, 1, 0, 0],
                            [0, 1, 0, 1, 0], [0, 1, 0, 0, 1], [0, 0, 1, 1, 0], [0, 0, 1, 0, 1], [0, 0, 0, 1, 1],
@@ -101,6 +123,7 @@ def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
     hdr[12] = hdr_chk[0]
     hdr[16:20] = hdr_chk[4:-0:-1]
 
+    # parity bit calculation
     C = np.zeros((PPM, 4 + CR_hdr))
     for k in range(0, 5):
         C[k, 0:4] = hdr[k * 4 + np.arange(0, 4)]
@@ -111,6 +134,7 @@ def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
         payload_ofs = payload_ofs + 4
         C[k, 3 + np.arange(1, CR_hdr + 1)] = np.mod(C[k, 0:4] @ Hamming_hdr, 2)
 
+    # rows flip
     C = np.flip(C, 0)
 
     S = np.zeros((4 + CR_hdr, PPM), dtype=np.uint8)
@@ -120,6 +144,7 @@ def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
 
     bits_hdr = np.reshape(S.transpose(), intlv_hdr_size, order='F')
 
+    # bit to symbol mapping
     k_hdr = np.zeros(n_sym_hdr)
     K = np.power(2, SF)
     for sym in range(0, n_sym_hdr):
@@ -129,8 +154,9 @@ def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
     return k_hdr, payload_ofs
 
 
+
 def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESSAGE):
-    # per gli SF alti (11 e 12) usa 2 bit in meno per simbolo
+    # bigger spreading factors (11 and 12) use 2 less bits per symbol
     if SF > 10:
         DE = np.uint8(1)
     else:
@@ -154,6 +180,7 @@ def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESS
     if MAC_CRC:
         PAYLOAD[8 * LENGTH + np.arange(0, 16, dtype=np.uint8)] = CRC16(PAYLOAD[0:8 * LENGTH])
 
+    # ----------------------------------------------------------- WHITENING
     W = np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.uint8)
     W_fb = np.array([0, 0, 0, 1, 1, 1, 0, 1], dtype=np.uint8)
     for k in range(1, int(np.floor(len(PAYLOAD) / 8) + 1)):
@@ -165,8 +192,10 @@ def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESS
     return PAYLOAD, n_sym_payload
 
 
+#CRC-16 calculation for LoRa (reverse engineered from a Libelium board)
 def CRC16(bits):
     length = int(len(bits) / 8)
+    # initial states for crc16 calculation, valid for lenghts in the range 5,255
     state_vec = np.array([46885, 27367, 35014, 54790, 18706, 15954, \
                           9784, 59350, 12042, 22321, 46211, 20984, 56450, 7998, 62433, 35799, \
                           2946, 47628, 30930, 52144, 59061, 10600, 56648, 10316, 34962, 55618, \
@@ -194,6 +223,17 @@ def CRC16(bits):
                           13620, 14292, 37000, 8503, 38414, 38738, 10517, 48783, 30506, 63444, \
                           50520, 34666, 341, 34793, 2623], dtype=np.uint16)
     crc_tmp = num2binary(state_vec[length - 5], 16)
+    # crc_poly = [1 0 0 0 1 0 0 0 0 0 0 1 0 0 0 0 1]
+    # 	for j = 1:numel(bits)/8
+    # 		for k = 1:8
+    # 			add = crc_tmp(1)
+    # 			crc_tmp = [crc_tmp(2: ),bits((j-1)*8+9-k)]
+    # 			if add
+    # 				crc_tmp = mod(crc_tmp+crc_poly(2: ),2)
+    #
+    #
+    #
+    # 	CRC=crc_tmp(16:-1:1)
     pos = 0
     pos4 = 4
     pos11 = 11
@@ -214,6 +254,8 @@ def CRC16(bits):
     return CRC
 
 
+# gray and reversed-gray mappings
+
 def gray_lut(n):
     pow_n = np.power(2, n)
     g = np.zeros(pow_n, dtype=np.uint16)
@@ -232,8 +274,11 @@ def gray_lut(n):
     return g, ig
 
 
+# function k_payload = \
 def lora_payload(SF, CR, n_sym_payload, PAYLOAD, payload_ofs):
+    # varargout = {DST, SRC, SEQNO, MESSAGE}
 
+    # hamming parity check matrices 
     Hamming_P1 = np.array(([1], [1], [1], [1]), dtype=np.uint8)
     Hamming_P2 = np.array(([1, 0], [1, 1], [1, 1], [0, 1]), dtype=np.uint8)
     Hamming_P3 = np.array(([1, 0, 1], [1, 1, 1], [1, 1, 0], [0, 1, 1]), dtype=np.uint8)
@@ -268,19 +313,23 @@ def lora_payload(SF, CR, n_sym_payload, PAYLOAD, payload_ofs):
             payload_ofs = payload_ofs + 4
             C[k, 4: 4 + CR] = np.mod(C[k, 0:4] @ Hamming, 2)
 
+        # row flip
         C = np.flip(C, 0)
 
+        # interleaving
         for ii in range(0, PPM):
             for jj in range(0, 4 + CR):
                 S[jj, np.mod(ii + jj, PPM)] = C[ii, jj]
 
         bits_blk = np.reshape(S.transpose(), intlv_blk_size, order='F')
 
+        # bit to symbol mapping
         for sym in range(0, n_sym_blk):
             k_payload[(blk) * n_sym_blk + sym] = K - 1 - np.power(2, (2 * DE)) * gray[int(
                 bits_blk[(sym * PPM + np.arange(0, PPM, dtype=np.uint16))] @ np.power(2, np.arange(PPM - 1, -1, -1)))]
 
     return k_payload
+
 
 
 
@@ -291,6 +340,7 @@ def chirp(f_ini,N,Ts,Df,t0_frac = 0,phi_ini = 0):
     s = np.exp(1j*(phi_ini + 2*np.pi*f_ini*t + np.pi*Df*np.power(t,2)))
     phi_fin = phi_ini + 2*np.pi*f_ini*T + np.pi*Df*np.power(T,2)
     return s, phi_fin
+
 
 def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
     truncated = False
@@ -304,6 +354,9 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
     SEQNO = -1
     CR = -1
     HAS_CRC = -1
+    # demodula i simboli dell'header
+    # n_sym_hdr == 8 o 0 in caso di header implicito
+    # numero di campioni del preambolo
     ofs = int(Nrise+12.25*N)
 
     CR_hdr = 4
@@ -329,7 +382,7 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
         k_hdr_est[i]=pos-1
 
 
-
+    #in case of header checksum failure, we assume the message to be lost/corrupted [ToDo: implement implicit header mode]
     (HDR_FCS_OK,LENGTH,HAS_CRC,CR,PAYLOAD_bits_hdr) = lora_header_decode(SF,k_hdr_est)
     if not HDR_FCS_OK:
         k_hdr_est = None
@@ -360,7 +413,18 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
             k_payload_est[i] = pos-1
 
 
-        (MAC_CRC_OK,DST,SRC,SEQNO,MSG,HAS_CRC) = lora_payload_decode(SF,k_payload_est,PAYLOAD_bits_hdr,HAS_CRC,CR)
+        (MAC_CRC_OK,DST,SRC,SEQNO,MSG,HAS_CRC) = lora_payload_decode(SF,k_payload_est,PAYLOAD_bits_hdr,HAS_CRC,CR,LENGTH)
+        # if MAC_CRC_OK:
+        #
+        # 	#fprintf('DST: #d SRC: #d SEQ: #d LEN: #d DATA: "',...
+        # 		#DST,SRC,SEQNO,LENGTH)
+        # 	for i in range(1,len(MSG)+1):
+        # 		if MSG[i-1]>=32 and MSG[i-1]<=127:
+        # 			#fprintf('#c',MSG(i))
+        # 			pass
+        # 		else:
+        # 			pass
+        # 			#fprintf('\\#d',MSG(i))
         return k_hdr_est, HDR_FCS_OK, k_payload_est, MAC_CRC_OK, MSG, DST,SRC,SEQNO, CR,HAS_CRC, truncated,ofs
 
 
@@ -368,11 +432,12 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
 
 
 
-#function [FCS_OK,varargout]
 def lora_header_decode(SF,k_hdr):
+
     if SF<7:
         FCS_OK = False
         return
+
 
 
 
@@ -382,6 +447,7 @@ def lora_header_decode(SF,k_hdr):
     PPM = SF-2*DE_hdr
     (_,degray) = gray_lut(PPM)
 
+    #np.fft(downsample(s_rx.*chirp)) demodulates the signal
     CR_hdr = 4
     n_sym_hdr = 4+CR_hdr
     intlv_hdr_size = PPM*n_sym_hdr
@@ -393,6 +459,7 @@ def lora_header_decode(SF,k_hdr):
         bits_est[(sym)*PPM+np.arange(0,PPM, dtype = np.int32)] = num2binary(degray[np.mod(bin,np.power(2,PPM))],PPM)
 
 
+    # interleaver del brevetto
     S = np.reshape(bits_est,(PPM,4+CR_hdr),order = 'F').transpose()
     C = np.zeros((PPM,4+CR_hdr),dtype = np.uint8)
     for ii in range(0,PPM):
@@ -401,9 +468,12 @@ def lora_header_decode(SF,k_hdr):
 
 
 
+    # row flip
     C = np.flip(C,0)
 
 
+
+    # header parity check matrix (reverse engineered through brute force search)
     header_FCS = np.array(([1,1,0,0,0],[1,0,1,0,0],[1,0,0,1,0],[1,0,0,0,1],[0,1,1,0,0], \
         [0,1,0,1,0],[0,1,0,0,1],[0,0,1,1,0],[0,0,1,0,1],[0,0,0,1,1],[0,0,1,1,1], \
         [0,1,0,1,1]))
@@ -415,10 +485,15 @@ def lora_header_decode(SF,k_hdr):
         HAS_CRC = False
         CR = -1
         PAYLOAD_bits = -1
-
+      
 
     else:
-
+        # header decoding
+        # Header=char(['len:',C(1,4:-1:1)+'0',C(2,4:-1:1)+'0',...
+        # 	' CR:',C(3,4:-1:2)+'0',...
+        # 	' MAC-CRC:',C(3,1)+'0',...
+        # 	' HDR-FCS:',C(4,4:-1:1)+'0',C(5,4:-1:1)+'0'])
+        #fprintf('Header Decode: #s [OK]\n',Header)
 
 
         LENGTH = bit2uint8(np.concatenate((C[1,0:4],C[0,0:4])))
@@ -444,9 +519,10 @@ def num2binary(num,length = 0):
     return num[-length:]
 
 
-#function n_sym_payload =
+
 def lora_payload_n_sym(SF,LENGTH,MAC_CRC,CR,n_bits_hdr):
 
+    # bigger spreading factors (11 and 12) use 2 less bits per symbol
     if SF > 10:
         DE = 1
 
@@ -462,8 +538,11 @@ def lora_payload_n_sym(SF,LENGTH,MAC_CRC,CR,n_bits_hdr):
 
 
 
-def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR):
 
+def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR,LENGTH_FROM_HDR):
+
+
+    # hamming parity check matrices 
     Hamming_P1 = np.array(([1],[1],[1],[1]), dtype=np.uint8)
     Hamming_P2 = np.array(([1,0], [1,1], [1,1], [0,1]), dtype=np.uint8)
     Hamming_P3 = np.array(([1,0,1], [1,1,1], [1,1,0], [0,1,1]), dtype=np.uint8)
@@ -504,6 +583,7 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR):
             bits_blk[(sym)*PPM+np.arange(0,PPM, dtype = np.int32)] = num2binary(degray[int(np.mod(bin,np.power(2,PPM)))],PPM)
 
 
+        # interleaving
 
 
 
@@ -514,6 +594,7 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR):
                 C[ii,jj]= S[jj,np.mod(ii+jj,PPM)]
 
 
+        # row flip
         C = np.flip(C,0)
 
 
@@ -541,6 +622,10 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR):
     SRC = bit2uint8(PAYLOAD[8+np.arange(0,8, dtype = np.int32)])
     SEQNO = bit2uint8(PAYLOAD[8*2+np.arange(0,8, dtype = np.int32)])
     LENGTH = bit2uint8(PAYLOAD[8*3+np.arange(0,8, dtype = np.int32)])
+    if (LENGTH == 0):
+    	LENGTH = LENGTH_FROM_HDR
+    	
+    
     MSG_LENGTH = LENGTH-4
     if (((LENGTH+2)*8 > len(PAYLOAD) and HAS_CRC) or (LENGTH*8 > len(PAYLOAD) and not (HAS_CRC)) or LENGTH<4):
         MAC_CRC_OK = False
@@ -554,14 +639,18 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR):
     if not HAS_CRC:
         MAC_CRC_OK = True
     else:
-
+        #fprintf('CRC-16: 0x#02X#02X ',...
+            #PAYLOAD(8*LENGTH+(1:8))*2.^(0:7)',...
+            #PAYLOAD(8*LENGTH+8+(1:8))*2.^(0:7)')
         temp = CRC16(PAYLOAD[0:LENGTH*8])
         temp = np.power(2,np.arange(0,8, dtype = np.int32)) @ (np.reshape(temp,(8,2),order = 'F'))
         #fprintf('(CRC-16: 0x#02X#02X)',temp(1),temp(2))
 
         if np.any(PAYLOAD[8*LENGTH+np.arange(0,16, dtype = np.int32)] != CRC16(PAYLOAD[0:8*LENGTH])):
+            #fprintf(' [CRC FAIL]\n')
             MAC_CRC_OK = False
         else:
+            #fprintf(' [CRC OK]\n')
             MAC_CRC_OK = True
 
 
@@ -577,7 +666,7 @@ def bit2uint8(bits):
 
 
 
-
+# LoRa preamble (reverse engineered from a real signal, is actually different from the one described in the patent)
 def lora_preamble(n_preamble, k1, k2, BW, K, OSF, t0_frac=0, phi0=0):
     (u0, phi) = lora_chirp(+1, 0, BW, K, OSF, t0_frac, phi0)
     (u1, phi) = lora_chirp(+1, k1, BW, K, OSF, t0_frac, phi)
@@ -588,13 +677,14 @@ def lora_preamble(n_preamble, k1, k2, BW, K, OSF, t0_frac=0, phi0=0):
     return s, phi
 
 
-# un chirp LoRa
-# function [s,phi] = \
+#generate a lora chirp
 def lora_chirp(mu, k, BW, K, OSF, t0_frac=0, phi0=0):
     fs = BW * OSF
     Ts = 1 / fs
+    # number of samples in one period T
     N = K * OSF
     T = N * Ts
+    # derivative of the instant frequency
     Df = mu * BW / T
     if k > 0:
         (s1, phi) = chirp(mu * BW * (1 / 2 - k / K), k * OSF, Ts, Df, t0_frac, phi0)
@@ -634,7 +724,12 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             break
 
         if(success):
-
+            # print("success")
+            # print(payload)
+            # print("message","".join([chr(int(item)) for item in payload]))
+            # print("FCS Check", HDR_FCS_OK)
+            # print("MAC CRC",MAC_CRC_OK)
+            # print("PAYLOAD LENGTH", len(payload))
             pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW)
             received = received + 1
 
@@ -644,12 +739,14 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             break
 
         else:
-
+            #cumulative_index = cumulative_index + last_index + 10*N
+            #cumulative_index = cumulative_index + last_index + 28 * N
             if (offset != -1):
                 cumulative_index = cumulative_index + last_index + offset
             else:
                 cumulative_index = cumulative_index + last_index + 28 * N
     return pack_array[:received]
+
 
 
 
@@ -667,13 +764,16 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
     CR = -1
     HAS_CRC = -1
     ns = len(s)
+    # base upchirp & downchirp
     u0 = chirp(-BW/2,N,Ts,BW/(N*Ts))[0]
 
     d0 = np.conj(u0)
 
+    # parameters and state variables in the synch block
     m_phases = 2
     m_phase = 0
-    m_vec = -1*np.ones((2*m_phases,6))
+    m_vec = -1*np.ones((2*m_phases,6)) # peak values positioning in the DFT
+    # oversampling factor for fine-grained esteem
     OSF_fine_sync = 4
 
     missed_sync = True
@@ -686,6 +786,8 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
     #         s = s(620000:1000000)
     #         ns = numel(s)
     while main_loop:
+      
+        # sample window for a full chirp
         try:
 
             s_win = s[np.arange(s_ofs,s_ofs+N, dtype = np.int32)]
@@ -695,6 +797,7 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
             return success, payload, last_index, truncated, HDR_FCS_OK, MAC_CRC_OK, DST, SRC, SEQNO, CR, HAS_CRC, offset
 
+        # multiplication of the signal with a downchirp and a upchirp, respectively.
 
 
 
@@ -705,14 +808,21 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
         m_u=np.argmax(Su)
         m_d=np.argmax(Sd)
 
+        # convert the positioning in values in the range [-N/2,N/2-1] 
         m_u=np.mod(m_u-1+N/2,N)-N/2
         m_d=np.mod(m_d-1+N/2,N)-N/2
 
 
         m_vec[np.arange(m_phase * 2, m_phase * 2 + 2), 1:] = m_vec[np.arange(m_phase * 2, m_phase * 2 + 2), :-1]
-        m_vec[np.arange(m_phase * 2, m_phase * 2 + 2), 0] = np.array([m_u, m_d]) #NOTA BENE: NUMPY CONVERTE AUTOMATICAMENTE LA RIGA IN COLONNA
+        m_vec[np.arange(m_phase * 2, m_phase * 2 + 2), 0] = np.array([m_u, m_d]) #Numpy automatically converts the row into a column
 
 
+
+
+
+        # three upchirpsm followed by two upchirps shifted by
+        # 8 e 16 bits, further followed by two downchirps, correspond to
+        # a preamble
         if np.abs(m_vec[m_phase*2+1,0]-m_vec[m_phase*2+1,1])<=1 and \
                 np.abs(m_vec[m_phase*2,2]-m_vec[m_phase*2,3]-8)<=1 and \
                 np.abs(m_vec[m_phase*2,3]-m_vec[m_phase*2,4]-8)<=1 and \
@@ -724,8 +834,10 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             if tmp < sync_metric:
                 sync_metric = tmp
 
-
+                #fprintf('phase: #g\n',m_phase)
+                #display(m_vec(m_phase*2+(1:2),:))
                 Nu = 2
+                # fine-grained estimation of the positions of the maximums in the DFT 
                 m_u0 = 0
                 for i in range (1,Nu+1):
                     try:
@@ -757,7 +869,8 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
                 m_d0 = m_d0/Nd
 
-
+                # Cfo_est: frequency error
+                #t_est: timing error
                 Cfo_est = (m_u0+m_d0)/2*BW/K/OSF_fine_sync
                 t_est = (m_d0-m_u0)*OSF/2/OSF_fine_sync + s_ofs-11*N-Nrise # n_pr = 8 + 2 syncword + 1 downchirp
                 break
@@ -779,6 +892,8 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
         missed_sync = True
 
+       
+       #symbol-level receiver
         p_ofs_est = int(np.ceil(t_est))
 
         last_index = p_ofs_est
@@ -798,22 +913,25 @@ def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
         return success, payload, last_index, truncated, HDR_FCS_OK, MAC_CRC_OK, DST, SRC, SEQNO, CR, HAS_CRC, offset
 
 
-#SUPPORT FUNCTION FOR ENCODING A LORA PACKET
+#SUPPORT FUNCTION TO ENCODE A LORA PACKET
 def complex_lora_packet(K, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, BW, OSF, SF, Trise, N, Ts, fs, Cfo_PPM, f0,  MESSAGE, t0_frac, phi0):
     k1 = K-8
     k2 = K-16
     SF = np.uint8(SF)
     p = lora_packet(BW,OSF,SF,k1,k2,n_pr,IH,CR,MAC_CRC,SRC,DST,SEQNO,MESSAGE,Trise,t0_frac,phi0)[0]
     size_p = p.size
-
+     
     ntail = N
     Ttail = ntail*Ts
-    T = np.ceil(size_p*Ts+Ttail)
+    T = np.ceil(size_p*Ts+Ttail)   # WHOLE NUMBER OF SECONDS
     ns = int(T*fs)
     s = np.zeros(ns, dtype= np.complex64)
+     #p_ofs=ceil((ns-np-ntail)*rand)
     p_ofs = 10000
 
     t = np.arange(0,size_p)*Ts
+    # Cfo_TX = Cfo_PPM*1e-6*f0*(2*rand-1)
+    # Cfo = Cfo_TX+Cfo_PPM*1e-6*f0*(2*rand-1)
     Cfo_TX = Cfo_PPM * 1e-6 * f0 * 1
     Cfo = Cfo_TX + Cfo_PPM * 1e-6 * f0 * 1
     s[p_ofs+np.arange(0,size_p)] = s[p_ofs+np.arange(0,size_p)] + p * np.exp(1j*(2*np.pi*Cfo*t+phi0))
@@ -828,7 +946,6 @@ def encode(f0, SF, BW, payload, fs, src, dst, seqn, cr=1, enable_crc=1, implicit
     OSF = fs / BW
     Ts = 1 / fs
     Nrise = np.ceil(Trise * fs)
-    # parametri del livello fisico CSS di LoRa
     K = np.power(2, SF)
     N = K * OSF
     # t0_frac = rand
@@ -839,7 +956,7 @@ def encode(f0, SF, BW, payload, fs, src, dst, seqn, cr=1, enable_crc=1, implicit
                             Ts, fs, Cfo_PPM, f0, payload, t0_frac, phi0)
     return complex_samples
 
-#DECODER FUNCTION. LOOKS FOR LORA PACKETS IN THE INPUT COMPLEX SAMPLES. RETURNS ALL THE PACKET FOUND IN THE SAMPLES.
+#DECODER FUNCTION. LOOKS FOR LORA PACKETS IN THE INPUT COMPLEX SAMPLES. RETURNS ALL THE PACKETS FOUND IN THE SAMPLES.
 
 def decode(complex_samples,SF, BW, fs):
     OSF = fs / BW
@@ -865,6 +982,21 @@ class LoRaPacket:
         self.ih = np.uint8(ih)
         self.SF = np.uint8(SF)
         self.BW = BW
+
+    def __eq__(self, other):
+        payload_eq = np.all(self.payload == other.payload)
+        src_eq = (self.src == other.src)
+        dst_eq = (self.dst == other.dst)
+        seqn_eq = (self.seqn == other.seqn)
+        hdr_ok_eq  = (self.hdr_ok == other.hdr_ok)
+        has_crc_eq = (self.has_crc == other.has_crc)
+        crc_ok_eq = (self.crc_ok == other.crc_ok)
+        cr_eq = (self.cr == other.cr)
+        ih_eq = (self.ih == other.ih)
+        SF_eq = (self.SF == other.SF)
+        BW_eq = (self.BW == other.BW)
+
+        return payload_eq and src_eq and dst_eq and seqn_eq and hdr_ok_eq and has_crc_eq and crc_ok_eq and cr_eq and ih_eq and SF_eq and BW_eq
 
     def __repr__(self):
         desc = "LoRa Packet Info:\n"
@@ -915,25 +1047,6 @@ class LoRaPacket:
 
 
 if __name__ == "__main__":
+    pass
 
-
-    #MAIN FOR DEBUGGING PURPOSE
-    payload = np.array([],dtype=np.uint8)
-    f0 = 915e6
-    SF = 12
-    BW = 125000
-    fs = 1e6
-    src = 100
-    dst = 200
-    seqn = 0
-    cr = 1
-    CRC = 1
-    IH = 0
-    pr_bits = 8
-
-    signal_tot = encode(f0,SF,BW,payload,fs,src,dst,seqn,cr,CRC,IH,pr_bits)
-    pack_list = decode(signal_tot,SF,BW,fs)
-
-    for pack in pack_list:
-        print(pack)
 
