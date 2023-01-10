@@ -4,3 +4,4 @@
 ### <sup>2</sup>Department of Electrical, Electronics and Computer Engineering (DIEEI), University of Catania, Italy
 ### <sup>3</sup>Institute for the Wireless Internet of Things, Northeastern University, Boston, USA
 ### Paper Link: https://dl.acm.org/doi/pdf/10.1145/3556564.3558239
+### Plug-and-play Colosseum Container: https://zenodo.org/record/7520494
