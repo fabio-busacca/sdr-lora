@@ -1,0 +1,414 @@
+id: sdrlora_encoder
+label: LoRa Encoder
+category: '[sdrlora]'
+
+templates:
+  imports: from gnuradio import sdrlora
+  make: >
+    sdrlora.encoder(${sf}, ${cr}, ${bw}, ${samp_rate}, ${f0}, ${has_crc},
+                    ${implicit_header}, ${preamble_symbols}, ${src}, ${dst},
+                    ${pseudo_header}, ${seqn}, ${cfo_ppm},
+                    ${sync_word}, ${ldro}, ${lead_in}, ${invert_iq},
+                    ${trise}, ${t0_frac}, ${phi0}, ${amplitude},
+                    ${hop_period}, ${hop_freqs}, ${burst_tail})
+
+parameters:
+- id: sf
+  label: Spreading Factor
+  dtype: int
+  default: '7'
+  options: ['5', '6', '7', '8', '9', '10', '11', '12']
+  option_labels: ['5 (implicit only)', '6 (implicit only)', '7', '8', '9',
+                  '10', '11', '12']
+- id: cr
+  label: Coding Rate (4/(4+cr))
+  dtype: int
+  default: '1'
+  options: ['1', '2', '3', '4']
+  option_labels: ['4/5', '4/6', '4/7 (corrects 1)', '4/8 (corrects 1, detects 2)']
+- id: bw
+  label: Bandwidth (Hz)
+  dtype: real
+  default: '125000'
+- id: samp_rate
+  label: Sample Rate (Hz)
+  dtype: real
+  default: 'samp_rate'
+- id: f0
+  label: Carrier (Hz)
+  dtype: real
+  default: '868e6'
+- id: has_crc
+  label: Payload CRC
+  dtype: bool
+  default: 'True'
+- id: implicit_header
+  label: Implicit Header
+  dtype: bool
+  default: 'False'
+- id: preamble_symbols
+  label: Preamble Symbols
+  dtype: int
+  default: '8'
+- id: src
+  label: Source Address
+  dtype: int
+  default: '0'
+- id: dst
+  label: Destination Address
+  dtype: int
+  default: '0'
+- id: pseudo_header
+  label: 4-byte Pseudo-header
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on (SDR-LoRa 4-byte prefix)', 'off (standard LoRa)']
+- id: seqn
+  label: Initial Sequence Number
+  dtype: int
+  default: '0'
+- id: cfo_ppm
+  label: Carrier Offset (ppm of f0)
+  dtype: real
+  default: '0'
+- id: sync_word
+  label: Sync Word
+  dtype: int_vector
+  default: '[0x12]'
+- id: lead_in
+  label: Lead-in (zero samples, -1 = auto)
+  dtype: int
+  default: '-1'
+- id: invert_iq
+  label: Invert IQ
+  dtype: bool
+  default: 'False'
+  options: ['False', 'True']
+  option_labels: ['normal (uplink)', 'inverted (LoRaWAN downlink)']
+- id: ldro
+  label: Low Data Rate Optimization
+  dtype: int
+  default: '2'
+  options: ['2', '1', '0']
+  option_labels: ['auto (symbol > 16 ms)', 'on', 'off']
+
+# EVERYTHING BELOW IS STILL A PARAMETER. Keep new parameters above
+# `inputs:`: an entry listed after `outputs:` would be parsed as an output
+# port, and every assert and template naming it would fail.
+- id: trise
+  label: Chirp Edge (s)
+  dtype: real
+  default: '50e-6'
+  hide: part
+- id: t0_frac
+  label: Timing Offset (samples)
+  dtype: real
+  default: '0.0'
+  hide: part
+- id: phi0
+  label: Initial Phase (rad)
+  dtype: real
+  default: '0.0'
+  hide: part
+- id: amplitude
+  label: Output Amplitude
+  dtype: real
+  default: '1.0'
+
+- id: hop_period
+  label: FHSS Hop Period (symbols, 0=off)
+  dtype: int
+  default: '0'
+- id: burst_tail
+  label: Burst Tail (zero samples, -1 = auto)
+  dtype: int
+  default: '-1'
+- id: hop_freqs
+  label: FHSS Channels (Hz from carrier)
+  dtype: real_vector
+  default: '[]'
+  hide: ${ 'none' if hop_period else 'part' }
+
+inputs:
+- domain: message
+  id: pdus
+  optional: false
+
+outputs:
+- domain: stream
+  dtype: complex
+
+asserts:
+# FINITENESS IS WRITTEN `abs(x) < 2**1024 - 2**970`, not `< float('inf')`.
+# The two agree on every float, NaN and +-inf included, but GRC hands a
+# `real` field typed as an integer literal through unconverted, and 10**400
+# < inf is True, while the block's binding refuses such a value.
+# 2**1024 - 2**970 is exactly where float() overflows -- an integer
+# below it rounds to a double, as the binding takes it -- so
+# this is that conversion's own bound; `<=` the largest double would refuse
+# integers float() rounds down to it. Arithmetic on a field is written
+# `2.0 * x` where `2 * x` could make an int too large to convert.
+# The rate rule is RELATIVE, like both blocks, and BOUNDED like them:
+# decoder_impl, encoder_impl and phy_encode all accept a ratio
+# within 1e-9 (relative) of an integer, so (125000, 16000000.01) is
+# accepted, and the bounds are check_rate_bounds' in lora_phy.h,
+# fs <= 1e12 and fs/bw <= 65536, past which the blocks' integer
+# conversions would be undefined. ORDERED SO NOTHING RAISES: both rates are
+# checked positive before anything divides, and the quotient is rounded only
+# after the finiteness and range clauses, because round(inf) raises
+# OverflowError and round(nan) ValueError, which GRC shows as "Assertion
+# did not evaluate".
+- ${ bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+     and abs(samp_rate) < 2**1024 - 2**970 and samp_rate <= 1e12
+     and samp_rate / bw <= 65536.5 and round(samp_rate / bw) >= 1
+     and abs(samp_rate / bw - round(samp_rate / bw))
+         <= 1e-9 * max(1.0, samp_rate / bw) }
+# The raised edge must fit inside a symbol, or the taper is built from samples
+# before the start of the preamble. Same bound as max_bandwidth_for_sf().
+# Guarded on sf like the separability asserts: at sf >= 1024 `2**sf` does
+# not fit a float and the division would raise, which GRC shows as
+# "Assertion did not evaluate" instead of the sf rule.
+- ${ trise > 0 and (not (sf >= 5 and sf <= 12) or bw <= (2**sf) / trise) }
+- ${ -1 < t0_frac < 1 }
+# SF5 and SF6 have no room for a 20-bit explicit header in the
+# 4*(SF-2) bits the header block holds, so encoder_impl throws at
+# construction; this reports it in GRC rather than when the flowgraph runs.
+- ${ sf >= 7 or implicit_header }
+- ${ 1 <= preamble_symbols <= 65535 }
+- ${ 0 <= src <= 255 and 0 <= dst <= 255 and 0 <= seqn <= 255 }
+- ${ lead_in <= 67108864 }
+# ...and from below, the int argument's own range: negative means auto,
+# so no rule refuses it, but below -2**31 pybind refuses the make call
+# with TypeError when the flowgraph starts.
+- ${ lead_in >= -2**31 }
+# burst_tail, the zero samples closing each burst: bounded like lead_in
+# (encoder_impl throws past it), and negative means auto, so only the int
+# argument bounds it from below.
+- ${ burst_tail <= 67108864 }
+- ${ burst_tail >= -2**31 }
+# cr, ldro, trise's upper bound and the sync word: all four are refused
+# by encoder_impl.cc / check_tx_params, so they are asserted here too,
+# and GRC shows the rule instead of the flowgraph dying from the block's
+# constructor. A dropdown is not enough on its own: an `options:` list
+# does not bind, which is why `sf` carries a range assert further down
+# despite having one.
+#
+# trise: the rule already here is the raised-edge/bandwidth relation, not
+# the 1-second ceiling. sf=12, bw=2000, samp_rate=16000, trise=1.5
+# satisfies it (bw <= 4096/1.5 = 2730) and the encoder refuses it.
+- ${ cr >= 1 and cr <= 4 }
+- ${ ldro >= 0 and ldro <= 2 }
+- ${ trise <= 1 }
+# The sync word is EITHER one byte with two non-zero nibbles OR two raw
+# symbols in 1..4095 -- see lora_phy.cc's check_*_params. The nibble rule belongs to the byte form
+# alone: [24, 32] and [3, 125] are legal pairs, accepted by both
+# implementations, and [24, 32] is the two-symbol equivalent of [0x34],
+# the same waveform, as in gr-lora_sdr. An assert stricter than its block
+# would take a working configuration off the palette with no way to find
+# out why.
+- ${ len(sync_word) >= 1 }
+- ${ len(sync_word) <= 2 }
+# SEPARABILITY. sync_symbols_separable (lora_phy.h) refuses a sync symbol
+# less than two bins from the preamble bin (mod 2^SF): symbol 0 coincides
+# with the preamble up-chirps and symbol 1 sits one bin away, inside the
+# sync check's own one-bin tolerance. Both block constructors throw on it,
+# so it is asserted here -- including at 1 and 4095, the two endpoints
+# the range assert below admits.
+#
+# It applies to the BYTE form as well: a byte becomes symbols
+# (hi*8, lo*8), so [0x34] is (24, 32) and 32 mod 32 = 0 at SF5:
+# [0x34] is refused at SF5 and accepted from SF6 up.
+#
+# Written out per element on purpose, as a PORTABILITY choice. GRC 3.10
+# evaluates asserts with the block's namespace as globals, so a
+# comprehension body could see block parameters there; an evaluator that
+# passed the parameters as locals would not, so no comprehension body here
+# references a block parameter -- every other assert keeps them outside
+# the loop too.
+- ${ len(sync_word) != 1 or not (sf >= 5 and sf <= 12)
+     or (min(((sync_word[0] >> 4) & 15) * 8 % (2**sf),
+     (2**sf) - ((sync_word[0] >> 4) & 15) * 8 % (2**sf)) >= 2
+     and min((sync_word[0] & 15) * 8 % (2**sf),
+     (2**sf) - (sync_word[0] & 15) * 8 % (2**sf)) >= 2) }
+- ${ len(sync_word) != 2 or not (sf >= 5 and sf <= 12)
+     or (min(sync_word[0] % (2**sf),
+     (2**sf) - sync_word[0] % (2**sf)) >= 2
+     and min(sync_word[1] % (2**sf),
+     (2**sf) - sync_word[1] % (2**sf)) >= 2) }
+- ${ len(sync_word) != 1 or (sync_word[0] >= 0 and sync_word[0] <= 255
+     and (sync_word[0] & 15) != 0 and ((sync_word[0] >> 4) & 15) != 0) }
+- ${ len(sync_word) != 2 or all(v >= 1 and v <= 4095 for v in sync_word) }
+# UPPER BOUND TOO, matching check_tx_params(), so an amplitude the block
+# constructor refuses is red
+# in GRC instead of a failure when the flowgraph runs.
+- ${ amplitude > 0 and amplitude <= 1e6 }
+# FINITE. cfo_ppm multiplies into the phase of every modulated sample, so a
+# nan or an infinity does not fail -- it emits a waveform of NaNs.
+# check_tx_params() throws on it, so without this assert the block would
+# be green in GRC and the flowgraph would die at run -- the same shape as the
+# amplitude bound above. A LARGE finite ppm stays legal: what it costs is a
+# frame outside the receiver's capture range, which is the caller's
+# decision -- up to the point where the carrier PHASE overflows, which the
+# carrier-phase assert below refuses.
+#
+# FINITENESS, not a magnitude, because both PHYs test isfinite: a finite
+# 1e301 is accepted. `abs(x) < 2**1024 - 2**970` IS isfinite: it is False
+# for NaN as well as +-inf, since every comparison with NaN is, so no
+# separate `x == x` clause is needed here or in the next two asserts.
+- ${ abs(cfo_ppm) < 2**1024 - 2**970 }
+# AND f0, which is the other factor of the same product: the carrier term is
+# 2*cfo_ppm*1e-6*f0, so a non-finite carrier emits exactly the same waveform
+# of NaNs, and cfo_ppm = 0 does not rescue it, because 0*inf is nan. f0 is free text here, so without
+# this the block is green in GRC and check_tx_params throws at run: the same
+# shape as the amplitude and cfo_ppm bounds above.
+- ${ abs(f0) < 2**1024 - 2**970 }
+# And the initial phase, which goes into cos/sin of every modulated sample.
+# The PHY refuses a non-finite phi0.
+- ${ abs(phi0) < 2**1024 - 2**970 }
+# Frequency hopping. 0 is off, matching RegHopPeriod. 13 is a deliberate
+# floor: the schedule is anchored at the header, so nothing before it is
+# rotated at any hop period, but a hop shorter than the 12.25-symbol sync
+# pattern is outside the range this module is characterized for.
+# hop_freqs[0] must be 0 because the list is relative to the channel the
+# receiver starts on.
+- ${ hop_period == 0 or hop_period >= 13 }
+- ${ hop_period == 0 or len(hop_freqs) > 0 }
+- ${ hop_period == 0 or len(hop_freqs) == 0 or hop_freqs[0] == 0 }
+# FINITENESS FIRST, because max() hides a NaN. Python keeps the running
+# maximum when a comparison is False, so max(abs(f) for f in [0.0, nan])
+# is 0.0 and the bound below would pass -- while check_rx_params throws
+# "hop_freqs must be finite". Order-dependent, too: [nan, 0.0] returns
+# nan, [0.0, nan] does not. The comprehension body touches only `f`, by
+# the same portability rule as the sync-word asserts above (GRC itself
+# would let it see block parameters).
+# abs(f) < 2**1024 - 2**970 IS the finiteness test, NaN included (and an
+# integer past a double, see the note at the top of asserts), so no
+# `f == f` clause is needed, as the cfo_ppm note says of the scalar
+# asserts.
+- ${ hop_period == 0 or len(hop_freqs) == 0 or
+     all(abs(f) < 2**1024 - 2**970 for f in hop_freqs) }
+- ${ hop_period == 0 or len(hop_freqs) == 0
+     or not (abs(samp_rate) < 2**1024 - 2**970
+             and abs(bw) < 2**1024 - 2**970)
+     or max(abs(f) for f in hop_freqs) <= (samp_rate - bw) / 2 }
+# THE COMPOSITE FRAME SIZE. Every field of a SF12 / fs-bw 8 frame with
+# preamble_symbols 65535 is individually legal and the waveform is 2.15e9
+# samples, 17.2 GB of complex64. The full check_frame_size runs in
+# encode_symbols, because the full estimate needs the payload symbol
+# count, and handle_pdu catches its throw and logs -- so on its own a
+# configuration past the limit would start and drop every PDU.
+#
+# encoder_impl therefore also calls check_frame_size(d_p, 0), the
+# payload-independent floor of the same formula, at construction, and
+# this assert is that floor exactly: the resolved lead-in plus
+# (preamble_symbols + 32) symbols of 2^sf * samp_rate/bw samples, against
+# MAX_FRAME_SAMPLES = 2**28. The lead-in is included, so the verdict
+# matches the constructor's at the limit. The auto rule is
+# default_lead_in(sf, bw, samp_rate, preamble_symbols) in lora_phy.h:
+# LEAD_IN_FLOOR (10000) topped up to
+# SYNC_ACC_SYMBOLS (6) symbols of warm-up and capped at LEAD_IN_MAX
+# (2**26); a lead_in of 0 or more is taken as given. (The cap cannot
+# change a verdict -- a shortfall past 2**26 samples puts the frame term
+# alone over 2**28 -- but it keeps this the lead-in the block computes.)
+# The frame term uses the ROUNDED ratio, as frame_samples_estimate and
+# the modulator do: with the unrounded one a rate the 1e-9 tolerance
+# accepts, 1e6 * (1 + 5e-10), would be refused by 0.1 sample at a frame
+# the encoder builds.
+# The guard is wider than `not (bw > 0)`: round() of a non-finite rate
+# RAISES, which GRC shows as "Assertion did not evaluate" naming no
+# rule, and the rate assert above is what reports such a rate instead.
+# round(), not int(), in the lead-in: the block rounds the ratio, and
+# int() would truncate a ratio just below an integer that the rate rule
+# accepts.
+- ${ not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (sf >= 5 and sf <= 12)
+     or (lead_in if lead_in >= 0
+         else min(2**26, max(10000, max(0, 6 - preamble_symbols)
+                                    * (2**sf) * round(samp_rate / bw))))
+        + (preamble_symbols + 32) * ((2**sf) * round(samp_rate / bw))
+        <= 2**28 }
+# THE CARRIER PHASE over that same floor. cfo_ppm and f0 are each asserted
+# finite above, but not their product: the modulator computes
+# 2*pi*(2*cfo_ppm*1e-6*f0)*t, which overflows past about 1.65e304 ppm at
+# 868 MHz (or cfo_ppm = f0 = 1e300), and a finite setting would then send
+# every PDU out as NaNs. check_frame_size refuses it from the
+# constructor's floor, and per frame, in the
+# same order of operations as here -- over the MODULATED part, the lead-in
+# being zeros the CFO never touches. Guarded on finite inputs so a NaN is
+# still refused by its own assert above, naming the field.
+- ${ not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (sf >= 5 and sf <= 12)
+     or not (abs(cfo_ppm) < 2**1024 - 2**970 and abs(f0) < 2**1024 - 2**970)
+     or abs(2 * 3.141592653589793 * (2.0 * cfo_ppm * 1e-6 * f0)
+            * (((preamble_symbols + 32) * ((2**sf) * round(samp_rate / bw)))
+               / samp_rate)) < float('inf') }
+# sf: encoder_impl's constructor throws outside 5..12, and `sf >= 7 or
+# implicit_header` above would accept 13 and 4.
+- ${ sf >= 5 and sf <= 12 }
+# hop_period's upper bound and hop_freqs' channel cap, as in the
+# decoder (both in check_hop_plan, lora_phy.cc).
+- ${ hop_period <= 65535 }
+- ${ hop_period == 0 or len(hop_freqs) <= 256 }
+
+documentation: |-
+  LoRa transmitter. It takes Protocol Data Units (PDUs), as metadata . u8vector
+  payload pairs, on its message port, and emits baseband IQ samples.
+
+  **Payload length.** With Pseudo-header on, a payload can be 0..251 bytes
+  long, since the pseudo-header adds four bytes to every frame and the
+  on-air length field is a single byte. With Pseudo-header off (standard LoRa
+  framing), the range is 2..255 bytes, since a LoRa CRC-16 is
+  not defined for fewer bytes than it occupies; with Payload CRC off, it
+  becomes 1..255 bytes. Note that this block drops an empty PDU whenever
+  Pseudo-header is off, while with Pseudo-header on the four prefix bytes
+  make an empty payload a valid frame.
+
+  The sample rate must be an integer multiple of the bandwidth; 8x (1 MS/s
+  at 125 kHz) is the usual choice, as well as the C++ default.
+
+  Carrier Offset simulates a crystal error at both ends of the link; hence,
+  it is applied twice: the carrier on air is offset by
+  2 x cfo_ppm x 1e-6 x f0. The default, 0, is a clean carrier.
+
+  **Bursts.** Each PDU becomes one burst, with tx_sob on its first sample and
+  tx_eob on its last one (the tags a USRP sink uses to transmit
+  bursts). The burst contains the frame, followed by Burst Tail zero
+  samples. The default, -1, is 512 x (samp_rate/bw) samples (4 ms at
+  125 kHz), which is enough to push the frame out of a filter or resampler
+  in between; a LoRa Decoder then delivers it about a quarter of a second
+  after its end, through its idle flush. Conversely, 0 sends the frame
+  alone, for a radio connected directly to the encoder, since the
+  transmitter is keyed for the whole burst. Note that a decoder whose idle
+  flush is turned off (set_idle_flush(0), from a Python Snippet)
+  needs its window plus 512 x (samp_rate/bw) samples.
+
+  **SF5 and SF6 require Implicit Header.** In fact, the header block consists
+  of the first SF-2 codewords at CR 4/8, namely 4*(SF-2) bits, while a header
+  needs 20 bits; therefore, it does not fit below SF7. The block throws an
+  error, rather than emitting a frame that no receiver can read.
+
+  **Pseudo-header.** By default, the payload carries the 4-byte
+  DST/SRC/SEQNO/LENGTH prefix of SDR-LoRa, inherited from the original
+  SDR-LoRa release. This prefix is not part of LoRa, i.e., on air it is
+  ordinary payload. Hence, turn it off to interoperate with other devices:
+  for instance, a standard frame from gr-lora_sdr (tapparelj) decodes
+  byte-exactly with it off, and not at all with it on, since its first four
+  payload bytes are taken as the prefix.
+  Moreover, turning it off saves 4 bytes of airtime, while src/dst/seqn are
+  no longer used.
+
+  **Invert IQ.** It swaps I and Q, which at complex baseband is equivalent
+  to conjugating the frame, as the SX127x InvertIQ setting does. Therefore,
+  every chirp reverses its direction: the preamble sweeps down and the
+  Start Frame Delimiter (SFD) up. This is the polarity of a LoRaWAN
+  downlink: gateways transmit inverted and listen normal, while end devices
+  do the opposite, so that neither hears its own kind. An inverted frame
+  does not decode as a normal one, and vice versa; since this separation is
+  the goal of the setting, both ends of a link must agree on it.
+
+file_format: 1

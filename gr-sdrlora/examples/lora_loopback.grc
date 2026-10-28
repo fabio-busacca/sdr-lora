@@ -1,0 +1,326 @@
+options:
+  parameters:
+    author: SDR-LoRa
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: Loopback from the LoRa Encoder to the LoRa Decoder through a noisy
+      channel, with no radio. Every second, a PDU carrying 'Hello LoRa!' is encoded,
+      noise is added, and the decoded packet is printed as text, together with its
+      metadata. Moreover, the noise slider shows how the link degrades.
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: lora_loopback
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LoRa loopback (no radio)
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    state: enabled
+
+blocks:
+- name: bw
+  id: variable
+  parameters:
+    comment: ''
+    value: 125e3
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [320, 8]
+    state: enabled
+- name: freq
+  id: variable
+  parameters:
+    comment: ''
+    value: 868.1e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [540, 8]
+    state: enabled
+- name: noise
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: ''
+    label: '"Noise voltage"'
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '0'
+    step: '0.05'
+    stop: '3'
+    value: '0.1'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [720, 8]
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: 1e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [200, 8]
+    state: enabled
+- name: sf
+  id: variable
+  parameters:
+    comment: ''
+    value: '7'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [440, 8]
+    state: enabled
+- name: blocks_message_strobe_0
+  id: blocks_message_strobe
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    msg: pmt.cons(pmt.make_dict(), pmt.init_u8vector(11, list(b"Hello LoRa!")))
+    period: '1000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 220]
+    state: enabled
+- name: blocks_throttle2_0
+  id: blocks_throttle2
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    ignoretag: 'True'
+    limit: auto
+    maximum: '0.1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samples_per_second: samp_rate
+    type: complex
+    vlen: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [520, 160]
+    state: enabled
+- name: channels_channel_model_0
+  id: channels_channel_model
+  parameters:
+    affinity: ''
+    alias: ''
+    block_tags: 'False'
+    comment: ''
+    epsilon: '1.0'
+    freq_offset: '0'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    noise_voltage: noise
+    seed: '1'
+    taps: '1.0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [720, 140]
+    state: enabled
+- name: qtgui_waterfall_sink_x_0
+  id: qtgui_waterfall_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    axislabels: 'True'
+    bw: samp_rate
+    color1: '0'
+    color10: '0'
+    color2: '0'
+    color3: '0'
+    color4: '0'
+    color5: '0'
+    color6: '0'
+    color7: '0'
+    color8: '0'
+    color9: '0'
+    comment: ''
+    fc: '0'
+    fftsize: '1024'
+    freqhalf: 'True'
+    grid: 'False'
+    gui_hint: ''
+    int_max: '10'
+    int_min: '-140'
+    label1: ''
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"LoRa channel"'
+    nconnections: '1'
+    showports: 'False'
+    type: complex
+    update_time: '0.10'
+    wintype: window.WIN_BLACKMAN_hARRIS
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [960, 330]
+    state: enabled
+- name: sdrlora_decoder_0
+  id: sdrlora_decoder
+  parameters:
+    affinity: ''
+    alias: ''
+    bw: bw
+    center_freq: '0'
+    channel_filter_rx: 'True'
+    comment: ''
+    cr: '1'
+    cutoff_ratio: '1.15'
+    fec_correct: 'True'
+    has_crc: 'True'
+    hop_freqs: '[]'
+    hop_period: '0'
+    implicit_header: 'False'
+    interp_target_osf: '4'
+    interpolate: 'True'
+    invert_iq: 'False'
+    ldro: '2'
+    low_latency: 'False'
+    max_payload_len: '251'
+    maxoutbuf: '0'
+    min_osf: '2'
+    minoutbuf: '0'
+    numtaps: '255'
+    payload_len: '0'
+    pseudo_header: 'False'
+    report_crc_errors: 'False'
+    robust_sync: 'True'
+    samp_rate: samp_rate
+    search_tail_symbols: '24'
+    sf: sf
+    soft_decision: 'True'
+    sync_phases: '0'
+    sync_threshold: '5.5'
+    sync_word: '[0x12]'
+    trise: 50e-6
+    window: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [960, 120]
+    state: enabled
+- name: sdrlora_encoder_0
+  id: sdrlora_encoder
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    burst_tail: '-1'
+    bw: bw
+    cfo_ppm: '0'
+    comment: ''
+    cr: '1'
+    dst: '0'
+    f0: freq
+    has_crc: 'True'
+    hop_freqs: '[]'
+    hop_period: '0'
+    implicit_header: 'False'
+    invert_iq: 'False'
+    ldro: '2'
+    lead_in: '-1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    phi0: '0.0'
+    preamble_symbols: '8'
+    pseudo_header: 'False'
+    samp_rate: samp_rate
+    seqn: '0'
+    sf: sf
+    src: '0'
+    sync_word: '[0x12]'
+    t0_frac: '0.0'
+    trise: 50e-6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [232, 160]
+    state: enabled
+- name: sdrlora_packet_print_0
+  id: sdrlora_packet_print
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    label: ''
+    show_hex: 'False'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1290, 160]
+    state: enabled
+
+connections:
+- [blocks_message_strobe_0, strobe, sdrlora_encoder_0, pdus]
+- [blocks_throttle2_0, '0', channels_channel_model_0, '0']
+- [channels_channel_model_0, '0', qtgui_waterfall_sink_x_0, '0']
+- [channels_channel_model_0, '0', sdrlora_decoder_0, '0']
+- [sdrlora_decoder_0, pdus, sdrlora_packet_print_0, pdus]
+- [sdrlora_encoder_0, '0', blocks_throttle2_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.9.2

@@ -1,0 +1,41 @@
+id: sdrlora_packet_print
+label: LoRa Packet Print
+category: '[sdrlora]'
+
+templates:
+  imports: from gnuradio import sdrlora
+  make: sdrlora.packet_print(${show_hex}, ${label})
+
+parameters:
+- id: show_hex
+  label: Show Hex
+  dtype: bool
+  default: 'False'
+  options: ['False', 'True']
+  option_labels: ['text only', 'text and hex']
+- id: label
+  label: Line Prefix
+  dtype: string
+  default: ''
+
+inputs:
+- domain: message
+  id: pdus
+  optional: false
+
+documentation: |-
+  It prints every packet that a LoRa Decoder delivers as one line of text,
+  for example:
+
+    SF7 CR4/5 CRC ok  dst 7 src 3 seqn 1  11 bytes  "Hello LoRa!"
+
+  The payload is shown as text, i.e., as UTF-8 when all of it is printable,
+  and otherwise as ASCII, with every other byte written as \xNN. Moreover,
+  Show Hex adds the bytes in hexadecimal. Note that dst/src/seqn appear
+  only when the frame carried the 4-byte pseudo-header, since they do not
+  exist in standard LoRa framing. Finally, Line Prefix, when set, starts
+  each line, e.g., to tell several decoders apart (one per SF).
+
+  Connect the pdus output of the decoder to the input of this block.
+
+file_format: 1

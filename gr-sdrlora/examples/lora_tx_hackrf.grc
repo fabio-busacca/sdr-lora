@@ -1,0 +1,172 @@
+options:
+  parameters:
+    author: SDR-LoRa
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: 'LoRa transmitter: it sends ''Hello LoRa!'' once a second, with standard
+      LoRa framing at SF7, 125 kHz and CR 4/5, with a CRC. Therefore, an SX127x node
+      with the same settings receives it.'
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: lora_tx_hackrf
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LoRa transmitter (HackRF)
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    state: enabled
+
+blocks:
+- name: bw
+  id: variable
+  parameters:
+    comment: ''
+    value: 125e3
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [320, 8]
+    state: enabled
+- name: freq
+  id: variable
+  parameters:
+    comment: ''
+    value: 868.1e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [540, 8]
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: 2e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [200, 8]
+    state: enabled
+- name: sf
+  id: variable
+  parameters:
+    comment: ''
+    value: '7'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [440, 8]
+    state: enabled
+- name: tx_vga
+  id: variable
+  parameters:
+    comment: ''
+    value: '20'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [760, 8]
+    state: enabled
+- name: blocks_message_strobe_0
+  id: blocks_message_strobe
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    msg: pmt.cons(pmt.make_dict(), pmt.init_u8vector(11, list(b"Hello LoRa!")))
+    period: '1000'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 220]
+    state: enabled
+- name: sdrlora_encoder_0
+  id: sdrlora_encoder
+  parameters:
+    affinity: ''
+    alias: ''
+    amplitude: '1.0'
+    burst_tail: '-1'
+    bw: bw
+    cfo_ppm: '0'
+    comment: ''
+    cr: '1'
+    dst: '0'
+    f0: freq
+    has_crc: 'True'
+    hop_freqs: '[]'
+    hop_period: '0'
+    implicit_header: 'False'
+    invert_iq: 'False'
+    ldro: '2'
+    lead_in: '-1'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    phi0: '0.0'
+    preamble_symbols: '8'
+    pseudo_header: 'False'
+    samp_rate: samp_rate
+    seqn: '0'
+    sf: sf
+    src: '0'
+    sync_word: '[0x12]'
+    t0_frac: '0.0'
+    trise: 50e-6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [232, 160]
+    state: enabled
+- name: soapy_hackrf_sink_0
+  id: soapy_hackrf_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    amp: 'False'
+    bandwidth: '0'
+    center_freq: freq
+    comment: ''
+    dev_args: ''
+    samp_rate: samp_rate
+    type: fc32
+    vga: tx_vga
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [560, 180]
+    state: enabled
+
+connections:
+- [blocks_message_strobe_0, strobe, sdrlora_encoder_0, pdus]
+- [sdrlora_encoder_0, '0', soapy_hackrf_sink_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.9.2

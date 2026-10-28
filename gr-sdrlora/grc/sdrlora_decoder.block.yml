@@ -1,0 +1,636 @@
+id: sdrlora_decoder
+label: LoRa Decoder
+category: '[sdrlora]'
+
+templates:
+  imports: from gnuradio import sdrlora
+  make: >
+    sdrlora.decoder(${sf}, ${bw}, ${samp_rate}, ${window},
+                    ${channel_filter_rx}, ${soft_decision}, ${robust_sync},
+                    ${sync_phases}, ${pseudo_header},
+                    ${implicit_header}, ${payload_len}, ${cr}, ${has_crc},
+                    ${sync_word}, ${ldro}, ${fec_correct}, ${interpolate},
+                    ${report_crc_errors}, ${max_payload_len},
+                    ${invert_iq}, ${trise}, ${cutoff_ratio}, ${numtaps},
+                    ${sync_threshold}, ${search_tail_symbols}, ${min_osf},
+                    ${interp_target_osf},
+                    ${hop_period}, ${hop_freqs}, ${low_latency},
+                    ${center_freq})
+
+parameters:
+- id: sf
+  label: Spreading Factor
+  dtype: int
+  default: '7'
+  options: ['5', '6', '7', '8', '9', '10', '11', '12']
+  option_labels: ['5 (implicit only)', '6 (implicit only)', '7', '8', '9',
+                  '10', '11', '12']
+- id: bw
+  label: Bandwidth (Hz)
+  dtype: real
+  default: '125000'
+- id: samp_rate
+  label: Sample Rate (Hz)
+  dtype: real
+  default: 'samp_rate'
+- id: window
+  label: Decode Window (samples)
+  dtype: int
+  default: '0'
+- id: channel_filter_rx
+  label: Channel Filter
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on (+6 dB)', 'off']
+- id: soft_decision
+  label: Soft-Decision FEC
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on (+2 dB)', 'off']
+- id: robust_sync
+  label: Accumulated Preamble Detection
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on', 'off (original)']
+- id: sync_phases
+  label: Sync Scan Granularity
+  dtype: int
+  default: '0'
+  options: ['0', '2', '4']
+  option_labels: ['auto (per-SF)', '2 (real-time)', '4 (sensitive, ~2x cost)']
+- id: implicit_header
+  label: Implicit Header
+  dtype: bool
+  default: 'False'
+  options: ['True', 'False']
+  option_labels: ['on (required for SF5/SF6)', 'off']
+- id: payload_len
+  label: Payload Length (implicit only)
+  dtype: int
+  default: '0'
+# The flag gates the Hamming syndrome correction on the PAYLOAD as well as
+# the header, in lora_rx.cc. Only CR 4/7 and 4/8 can locate
+# an error; 4/5 and 4/6 have d_min = 2 and can only detect one.
+# soft_decision supersedes it for the payload when both are on.
+- id: fec_correct
+  label: Hamming FEC Correction
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on (header and payload)', 'off (original receiver)']
+- id: interpolate
+  label: Interpolate Below 2x
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on', 'off']
+- id: max_payload_len
+  label: Longest Payload Expected (bytes)
+  dtype: int
+  default: '251'
+- id: invert_iq
+  label: Invert IQ
+  dtype: bool
+  default: 'False'
+  options: ['False', 'True']
+  option_labels: ['normal (uplink)', 'inverted (LoRaWAN downlink)']
+- id: report_crc_errors
+  label: Report CRC Failures
+  dtype: bool
+  default: 'False'
+  options: ['False', 'True']
+  option_labels: ['off (valid packets only)', 'on (for packet error rate)']
+- id: sync_word
+  label: Sync Word
+  dtype: int_vector
+  default: '[0x12]'
+- id: ldro
+  label: Low Data Rate Optimization
+  dtype: int
+  default: '2'
+  options: ['2', '1', '0']
+  option_labels: ['auto (symbol > 16 ms)', 'on', 'off']
+- id: cr
+  label: Coding Rate (implicit only)
+  dtype: int
+  default: '1'
+  options: ['1', '2', '3', '4']
+  option_labels: ['4/5', '4/6', '4/7', '4/8']
+  hide: ${ 'none' if implicit_header else 'part' }
+- id: has_crc
+  label: Payload CRC (implicit only)
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on', 'off']
+  hide: ${ 'none' if implicit_header else 'part' }
+- id: pseudo_header
+  label: 4-byte Pseudo-header
+  dtype: bool
+  default: 'True'
+  options: ['True', 'False']
+  option_labels: ['on (SDR-LoRa 4-byte prefix)', 'off (standard LoRa)']
+
+# EVERYTHING BELOW IS STILL A PARAMETER. Keep new parameters above
+# `inputs:`: an entry listed after `outputs:` would be parsed as an output
+# port, and every assert and template naming it would fail.
+- id: trise
+  label: Chirp Edge (s)
+  dtype: real
+  default: '50e-6'
+  hide: part
+- id: cutoff_ratio
+  label: RX Filter Cutoff (xBW)
+  dtype: real
+  default: '1.15'
+- id: numtaps
+  label: RX Filter Taps (odd)
+  dtype: int
+  default: '255'
+- id: sync_threshold
+  label: Detect Threshold (peak/mean)
+  dtype: real
+  default: '5.5'
+- id: search_tail_symbols
+  label: Search Tail (symbols)
+  dtype: int
+  default: '24'
+  hide: part
+- id: min_osf
+  label: Minimum fs/BW
+  dtype: int
+  default: '2'
+  hide: part
+- id: interp_target_osf
+  label: Interpolate Up To (fs/BW)
+  dtype: int
+  default: '4'
+  hide: part
+
+- id: low_latency
+  label: Low Latency
+  dtype: bool
+  default: 'False'
+  options: ['False', 'True']
+  option_labels: ['No (default window: 32 symbols, at least 4096 chips)', 'Yes (half: 16 symbols, at least 2048 chips)']
+- id: center_freq
+  label: Carrier for Clock Tracking (Hz, 0=off)
+  dtype: real
+  default: '0'
+- id: hop_period
+  label: FHSS Hop Period (symbols, 0=off)
+  dtype: int
+  default: '0'
+- id: hop_freqs
+  label: FHSS Channels (Hz from carrier)
+  dtype: real_vector
+  default: '[]'
+  hide: ${ 'none' if hop_period else 'part' }
+
+inputs:
+- domain: stream
+  dtype: complex
+
+outputs:
+- domain: message
+  id: pdus
+  optional: true
+
+asserts:
+# FINITENESS IS WRITTEN `abs(x) < 2**1024 - 2**970`, not `< float('inf')`.
+# The two agree on every float, NaN and +-inf included, but GRC hands a
+# `real` field typed as an integer literal through unconverted, and 10**400
+# < inf is True, while the block's binding refuses such a value.
+# 2**1024 - 2**970 is exactly where float() overflows -- an integer
+# below it rounds to a double, as the binding takes it -- so
+# this is that conversion's own bound; `<=` the largest double would refuse
+# integers float() rounds down to it. Arithmetic on a field is written
+# `2.0 * x` where `2 * x` could make an int too large to convert.
+# The rate rule is RELATIVE, like both blocks, and BOUNDED like them:
+# decoder_impl, encoder_impl and phy_encode all accept a ratio
+# within 1e-9 (relative) of an integer, so (125000, 16000000.01) is
+# accepted, and the bounds are check_rate_bounds' in lora_phy.h,
+# fs <= 1e12 and fs/bw <= 65536, past which the blocks' integer
+# conversions would be undefined. ORDERED SO NOTHING RAISES: both rates are
+# checked positive before anything divides, and the quotient is rounded only
+# after the finiteness and range clauses, because round(inf) raises
+# OverflowError and round(nan) ValueError, which GRC shows as "Assertion
+# did not evaluate".
+- ${ bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+     and abs(samp_rate) < 2**1024 - 2**970 and samp_rate <= 1e12
+     and samp_rate / bw <= 65536.5 and round(samp_rate / bw) >= 1
+     and abs(samp_rate / bw - round(samp_rate / bw))
+         <= 1e-9 * max(1.0, samp_rate / bw) }
+# The sync FFTs need power-of-two lengths, so this receiver takes only
+# power-of-two ratios -- fs/BW of 3, 5, 6 and 7 throw at flowgraph start.
+# The ENCODER block accepts every integer ratio, so without this assert
+# GRC would build a 375 kHz / 125 kHz
+# pair that dies on run.
+# An INTEGER on both sides of the &: samp_rate and bw are dtype: real, and
+# 8.0 & 7.0 raises TypeError, which GRC reports as "Assertion did not
+# evaluate" and which would red the block out even at its default
+# settings.
+# round(samp_rate / bw), not int(samp_rate) // int(bw) -- the latter
+# divides by ZERO for any 0 < bw < 1 -- and not int(samp_rate / bw)
+# either, which TRUNCATES: a ratio of 7.99999999992 is 8 to within the
+# rate rule's tolerance and 8 to decoder_impl, which rounds, and int()
+# would make it 7 and refuse it. Every rate-derived integer in this file is
+# round()ed for the same reason. round() of a non-finite rate raises,
+# which is what the guard is for; the rate assert above is what REPORTS
+# such a rate.
+- ${ not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or (round(samp_rate / bw)) & (round(samp_rate / bw) - 1) == 0 }
+# Mirrors decoder_impl.cc: the minimum is 0 WITH the pseudo-header and 1
+# without, because the 4-byte prefix carries its own length: payload_len
+# = 0 with the pseudo-header is legitimate and round-trips at every SF.
+# The upper bound is the next assert.
+- ${ (not implicit_header) or payload_len >= (0 if pseudo_header else 1) }
+# The ceiling is what max_payload_len DECLARES: the receive buffer is sized
+# for max_payload_len + 4 + 2 bytes on air at CR 4/8 with the CRC, plus the
+# retained tail, so a longer implicit frame would build and then be
+# dropped every time with only overruns() moving. A declared envelope
+# rather than the exact edge: frames somewhat past it still fit the tail's
+# slack, how far depending on CR and CRC. decoder_impl refuses by the
+# same rule. It implies the on-air byte,
+# `payload_len + prefix <= 255`, since max_payload_len <= 251 is asserted
+# below, so that needs no assert of its own; decoder_impl keeps its own
+# check of it.
+- ${ (not implicit_header) or payload_len + (4 if pseudo_header else 0) <= max_payload_len + 4 }
+- ${ (not implicit_header) or (1 <= cr <= 4) }
+# UPPER BOUNDS AS WELL AS LOWER ONES, matching check_rx_params() in
+# lora_phy.cc, so a value the
+# block constructor refuses is red in GRC instead of a throw when the
+# flowgraph starts -- the failure mode every assert in this file exists to
+# prevent.
+# ldro is refused outside 0..2 by decoder_impl's constructor and
+# check_rx_params.
+- ${ ldro >= 0 and ldro <= 2 }
+- ${ trise > 0 and trise <= 1 }
+# center_freq: 0 is off; anything else is a carrier in Hz of at
+# least 1 MHz, as check_rx_params requires -- 868 reads
+# as MHz. The finiteness bound first, so a huge integer is refused here.
+- ${ center_freq == 0 or (abs(center_freq) < 2**1024 - 2**970
+                          and center_freq >= 1e6) }
+# The sync word is EITHER one byte with two non-zero nibbles OR two raw
+# symbols in 1..4095 -- see lora_phy.cc's check_*_params. The nibble rule belongs to the byte form
+# alone: [24, 32] and [3, 125] are legal pairs, accepted by both
+# implementations, and [24, 32] is the two-symbol equivalent of [0x34],
+# the same waveform, as in gr-lora_sdr. An assert stricter than its block
+# would take a working configuration off the palette with no way to find
+# out why.
+- ${ len(sync_word) >= 1 }
+- ${ len(sync_word) <= 2 }
+# SEPARABILITY. sync_symbols_separable (lora_phy.h) refuses a sync symbol
+# less than two bins from the preamble bin (mod 2^SF): symbol 0 coincides
+# with the preamble up-chirps and symbol 1 sits one bin away, inside the
+# sync check's own one-bin tolerance. Both block constructors throw on it,
+# so it is asserted here -- including at 1 and 4095, the two endpoints
+# the range assert below admits.
+#
+# It applies to the BYTE form as well: a byte becomes symbols
+# (hi*8, lo*8), so [0x34] is (24, 32) and 32 mod 32 = 0 at SF5:
+# [0x34] is refused at SF5 and accepted from SF6 up.
+#
+# Written out per element on purpose, as a PORTABILITY choice. GRC 3.10
+# evaluates asserts with the block's namespace as globals, so a
+# comprehension body could see block parameters there; an evaluator that
+# passed the parameters as locals would not, so no comprehension body here
+# references a block parameter -- every other assert keeps them outside
+# the loop too.
+- ${ len(sync_word) != 1 or not (sf >= 5 and sf <= 12)
+     or (min(((sync_word[0] >> 4) & 15) * 8 % (2**sf),
+     (2**sf) - ((sync_word[0] >> 4) & 15) * 8 % (2**sf)) >= 2
+     and min((sync_word[0] & 15) * 8 % (2**sf),
+     (2**sf) - (sync_word[0] & 15) * 8 % (2**sf)) >= 2) }
+- ${ len(sync_word) != 2 or not (sf >= 5 and sf <= 12)
+     or (min(sync_word[0] % (2**sf),
+     (2**sf) - sync_word[0] % (2**sf)) >= 2
+     and min(sync_word[1] % (2**sf),
+     (2**sf) - sync_word[1] % (2**sf)) >= 2) }
+- ${ len(sync_word) != 1 or (sync_word[0] >= 0 and sync_word[0] <= 255
+     and (sync_word[0] & 15) != 0 and ((sync_word[0] >> 4) & 15) != 0) }
+- ${ len(sync_word) != 2 or all(v >= 1 and v <= 4095 for v in sync_word) }
+- ${ cutoff_ratio > 0 and cutoff_ratio <= 64 }
+# Odd, so the windowed sinc has a whole-sample group delay.
+- ${ numtaps >= 3 and numtaps <= 8191 and numtaps % 2 == 1 }
+# The channel filter's half-width is held back from every scan so the
+# next one filters it with real context, and decoder_impl refuses one
+# wider than the FLOOR search tail, 24 * 2^sf * osf -- a conservative
+# envelope: see the note on hold_limit in decoder_impl.cc. This shows the
+# refusal on the palette.
+#
+# Six geometries reach it inside the 8191-tap limit, including SF7 at
+# osf 1. Guarded on channel_filter_rx because nothing is held back with
+# the filter off.
+# INTEGER division, matching the C++ `d_p.numtaps / 2` on an int and
+# Python's `int(taps) // 2`: with `/` the assert would refuse numtaps 1537
+# at SF5/osf1 -- 768.5 against a tail of 768 -- which both
+# implementations accept.
+# `bw > 0` FIRST. Without it the division raises at the degenerate
+# rates, which GRC shows as "Assertion did not evaluate" and reds the
+# block out. The rate assert above already refuses bw <= 0, so
+# short-circuiting here loses nothing.
+# AND ONLY WHERE THE FILTER RUNS: at fs = bw without interpolation it is
+# the identity, and the block holds nothing back for it.
+- ${ not channel_filter_rx or not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (round(samp_rate / bw) > 1
+             or (interpolate and round(samp_rate / bw) < min_osf))
+     or not (sf >= 5 and sf <= 12)
+     or numtaps // 2 <= 24 * (2**sf) * round(samp_rate / bw) }
+# 24, NOT max(search_tail_symbols, 24): the block anchors this bound to the
+# floor tail, whatever the knob.
+# A peak-to-MEAN ratio: a spectrum whose peak does not exceed its own mean is
+# not a detection.
+#
+# AND FINITE. `sync_threshold > 1.0` alone passes +inf, which
+# check_rx_params refuses with std::isfinite -- as its note on
+# sync_threshold says, "!(x > 1.0) catches NaN and -inf, but +inf passes
+# it" -- so the upper clause is needed here too.
+- ${ sync_threshold > 1.0 and sync_threshold < 2**1024 - 2**970 }
+- ${ search_tail_symbols >= 13 and search_tail_symbols <= 4096 }
+# Interpolating up to a ratio still below the minimum clears nothing.
+- ${ min_osf >= 1 and min_osf <= 64 }
+- ${ interp_target_osf >= min_osf and interp_target_osf <= 64 }
+# Bounds the longest frame the receiver holds, and so the buffer size.
+# 251 is the most the 4-byte pseudo-header leaves room for, and it ALSO
+# covers a 255-byte standard-framing payload: the reservation always
+# counts the prefix (max_packet_symbols sizes for max_payload_len + 4 + 2
+# bytes), so 252..255 are refused although a standard frame can carry
+# that many bytes -- 251 is the setting for them.
+- ${ max_payload_len >= 1 and max_payload_len <= 251 }
+# Frequency hopping. 0 is off, matching RegHopPeriod. 13 is a deliberate
+# floor: the schedule is anchored at the header, so nothing before it is
+# rotated at any hop period, but a hop shorter than the 12.25-symbol sync
+# pattern is outside the range this module is characterized for.
+# hop_freqs[0] must be 0 because the list is relative to the channel
+# the receiver starts on, and it acquires the preamble at baseband.
+- ${ hop_period == 0 or hop_period >= 13 }
+- ${ hop_period == 0 or len(hop_freqs) > 0 }
+- ${ hop_period == 0 or len(hop_freqs) == 0 or hop_freqs[0] == 0 }
+# FINITENESS FIRST, because max() hides a NaN. Python keeps the running
+# maximum when a comparison is False, so max(abs(f) for f in [0.0, nan])
+# is 0.0 and the bound below would pass -- while check_rx_params throws
+# "hop_freqs must be finite". Order-dependent, too: [nan, 0.0] returns
+# nan, [0.0, nan] does not. The comprehension body touches only `f`, by
+# the same portability rule as the sync-word asserts above (GRC itself
+# would let it see block parameters).
+# abs(f) < 2**1024 - 2**970 IS the finiteness test, NaN included (and an
+# integer past a double, see the note at the top of asserts), so no
+# `f == f` clause is needed: every comparison with NaN is False.
+- ${ hop_period == 0 or len(hop_freqs) == 0 or
+     all(abs(f) < 2**1024 - 2**970 for f in hop_freqs) }
+- ${ hop_period == 0 or len(hop_freqs) == 0
+     or not (abs(samp_rate) < 2**1024 - 2**970
+             and abs(bw) < 2**1024 - 2**970)
+     or max(abs(f) for f in hop_freqs) <= (samp_rate - bw) / 2 }
+# AND THE WIDENED CUTOFF, which the band rule above does not imply. With the
+# channel filter on and a plan in force, the receiver raises its cutoff to
+# 1 + 2*max|f|/bw -- the filter runs before the de-hop, so every channel has
+# to be inside it -- and the filter accepts at most 64. So the real limit is
+# max|f| <= 31.5*bw, tighter than the band once samp_rate/bw passes 64: at
+# 16 MS/s the rule above allows +-7.94 MHz, but anything past +-3.9375 MHz
+# needs a cutoff above 64. decoder_impl refuses it by name at
+# construction; this shows it on the palette. channel_filter_rx off skips
+# the widening, so it is exempt.
+- ${ not channel_filter_rx or hop_period == 0 or len(hop_freqs) == 0
+     or not (bw > 0 and abs(bw) < 2**1024 - 2**970)
+     or not all(abs(f) < 2**1024 - 2**970 for f in hop_freqs)
+     or max(cutoff_ratio, 1 + 2.0 * max(abs(f) for f in hop_freqs) / bw) <= 64 }
+# report_crc_errors needs an explicit header AND standard framing.
+# decoder_impl's constructor throws on either combination, and
+# pseudo_header defaults to True here -- so ticking "Report CRC
+# Failures" alone is a conflict, which these asserts show in GRC rather
+# than at flowgraph start.
+- ${ not report_crc_errors or not implicit_header }
+- ${ not report_crc_errors or not pseudo_header }
+# sf: decoder_impl's constructor throws outside 5..12. BOTH RULES ARE
+# NEEDED, as in the encoder: the range says nothing about SF5/SF6 needing
+# an implicit header, which the constructor and check_rx_params both
+# require. The dropdown offers 5 and labels it
+# "5 (implicit only)", so that case is one click away.
+- ${ sf >= 5 and sf <= 12 }
+- ${ sf >= 7 or implicit_header }
+# hop_period's UPPER bound (check_hop_plan in lora_phy.cc, 13..65535) and
+# hop_freqs' channel cap (the same function, at most 256).
+- ${ hop_period <= 65535 }
+- ${ hop_period == 0 or len(hop_freqs) <= 256 }
+# sync_phases: ANY VALUE BELOW 1 MEANS AUTO on both sides
+# (find_preamble in lora_sync.cc reads `sync_phases < 1 ?
+# default_sync_phases(SF)`),
+# and the block's own default is 0 -- so the bound is only on the upper
+# end, and the divisibility assert below skips values below 1.
+- ${ sync_phases <= 16 }
+# THE INT ARGUMENT'S RANGE, for the ints nothing else bounds on that
+# side: sync_phases from below, where it means auto, and cr and
+# payload_len in explicit-header mode, where the header carries both and
+# the asserts above are guarded off. GRC hands the make template a
+# Python int, and past a C int pybind refuses the call with TypeError
+# when the flowgraph starts. window is bounded the same way, by the
+# ceiling asserts further down.
+- ${ sync_phases >= -2**31 }
+- ${ cr >= -2**31 and cr <= 2**31 - 1 }
+- ${ payload_len >= -2**31 and payload_len <= 2**31 - 1 }
+# And it must divide the symbol length. decoder_impl's constructor
+# refuses one that does not, so a value like 3 fails at flowgraph start
+# rather than inside work() mid-stream.
+- ${ sync_phases < 1 or not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (sf >= 5 and sf <= 12)
+     or ((2**sf) * round(samp_rate / bw)) % sync_phases == 0 }
+# WINDOW. 0 selects the per-SF default. The constructor refuses a
+# NEGATIVE value by name rather than letting it silently become that
+# default, so a typo'd -4096 cannot look as though it had been applied.
+# It also refuses a window past the buffer ceiling -- the buffer costs
+# about 55 bytes of resident set per window sample, so 1654 MB at window
+# 3e7 and ~120 GB at 2**31-1. No fixed cap such as 2**26 would do: at
+# SF12 / 8 MS/s the ceiling is 121110782, so a fixed bound would be
+# STRICTER than the block.
+- ${ window >= 0 }
+# The int argument's range, `window <= 2**31 - 1`, needs no assert of its
+# own: the ceiling assert below implies it -- the window must fit the
+# buffer ceiling, and the working-set assert holds that near 2**29.
+# AND THE CEILING ITSELF, decoder_impl's d_cap written out, so e.g.
+# window = 1e6 at SF7 / 1 MS/s (ceiling 653566) is red in GRC rather than
+# a throw at flowgraph start. The terms, in order:
+# one maximum-length frame -- max_packet_symbols in lora_sync.cc, 8-symbol
+# blocks of 4*(sf - 2*de) bits over the worst 8*(max_payload_len + 6)
+# payload bits, plus 22 symbols of preamble and header -- the retained
+# tail, max(search_tail_symbols, 24) symbols, and the front end's
+# footprint, twice the hold-back: numtaps//2 with the channel filter on,
+# and at least 63 -- half the interpolator's 127 taps (INTERP_TAPS) --
+# when the block interpolates below min_osf. `de` is the resolved LDRO
+# flag: ldro 2 is auto, on above a 16 ms symbol (ldro_enabled in
+# lora_phy.h). A window of 0 selects the default, which the block clamps to
+# this ceiling, so it always passes.
+# Guarded like the other rate-derived asserts, and on sf, which the
+# block-count divisor needs; the asserts above report both.
+- ${ not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (sf >= 5 and sf <= 12)
+     or window <= (-(-(8 * (max_payload_len + 6))
+                     // (4 * (sf - 2 * (0 if ldro == 0 else 1 if ldro == 1
+                          else int((2**sf) * 1e3 / bw > 16.0)))))
+                   * 8 + 22 + max(search_tail_symbols, 24))
+                  * (2**sf) * round(samp_rate / bw)
+                  + 2 * max(numtaps // 2 if channel_filter_rx
+                                and (round(samp_rate / bw) > 1
+                                     or (interpolate
+                                         and round(samp_rate / bw) < min_osf))
+                                else 0,
+                            63 if interpolate
+                                  and round(samp_rate / bw) < min_osf
+                            else 0) }
+# AND A WORKING SET A HOST CAN HOLD: one maximum-length frame and the
+# retained tail -- the first two terms above -- within twice
+# MAX_FRAME_SAMPLES, 2**29 samples. Past it, e.g. at SF12 / bw 7812.5 /
+# 512 MS/s, the block would construct and run out of memory at its first
+# scan; decoder_impl refuses it by name.
+- ${ not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or not (sf >= 5 and sf <= 12)
+     or (-(-(8 * (max_payload_len + 6))
+           // (4 * (sf - 2 * (0 if ldro == 0 else 1 if ldro == 1
+                else int((2**sf) * 1e3 / bw > 16.0)))))
+         * 8 + 22 + max(search_tail_symbols, 24))
+        * (2**sf) * round(samp_rate / bw) <= 2**29 }
+# THE INTERPOLATED oversampling, not the input one. decode_buffer
+# interpolates when fs/bw < min_osf, by ceil(interp_target_osf / fs-bw),
+# and the sync FFTs need power-of-two lengths -- so the PRODUCT has to be
+# a power of two. decoder_impl's constructor refuses it
+# (check_effective_osf in lora_rx.h), because a throw from the first
+# process() would leave through GNU Radio's thread body and kill the
+# flowgraph. At osf 1 with the default min_osf most permitted targets
+# fail it, e.g. sf 7 / bw 125000 / samp_rate 125000 / interp_target_osf 3.
+# Same root cause as the power-of-two rate rule above.
+#
+# `-(-a // b)` is ceil(a/b); the guard carries the extra `< 1` clause
+# because the ratio is the DIVISOR here and a sub-unity rate passes the
+# positivity guard.
+- ${ not interpolate or not (bw > 0 and samp_rate > 0 and abs(bw) < 2**1024 - 2**970
+          and abs(samp_rate) < 2**1024 - 2**970
+          and abs(samp_rate / bw) < float('inf'))
+     or round(samp_rate / bw) < 1
+     or round(samp_rate / bw) >= min_osf
+     or ((round(samp_rate / bw) * -(-interp_target_osf // round(samp_rate / bw)))
+         & (round(samp_rate / bw) * -(-interp_target_osf // round(samp_rate / bw))
+            - 1)) == 0 }
+
+documentation: |-
+  LoRa receiver. It consumes baseband IQ samples, and emits Protocol Data
+  Units (PDUs), as metadata . u8vector payload pairs, for every packet whose
+  Cyclic Redundancy Check (CRC) passes. Moreover, with Report CRC Failures
+  set, it emits every packet with a valid header, regardless of its CRC,
+  with crc_ok in the metadata telling which. This mode needs standard
+  framing (Pseudo-header off) and an explicit header, since a
+  corrupted payload cannot be sized from a length field inside itself.
+
+  The metadata carries src, dst, seqn, cr, sf and crc_ok.
+
+  A tx_eob stream tag (which the LoRa Encoder puts on the last sample of each
+  burst) flushes the buffer at that sample, so that a tagged burst is
+  decoded as soon as it ends. Note that a live receive stream carries no
+  such tag.
+
+  **Implicit header mode needs three parameters, not one.** Since there is no
+  header on air, Payload Length, Coding Rate and Payload CRC must all match
+  the transmitter, i.e., the receiver cannot discover any of them. In
+  explicit mode, the header carries the last two, which are hence ignored.
+  Moreover, Payload Length must fit Longest Payload Expected: at most
+  max_payload_len with the pseudo-header, and max_payload_len + 4 without it.
+
+  The sample rate must be a power-of-two multiple of the bandwidth, since the
+  synchronization FFTs have lengths N and 4N, and the transforms need
+  power-of-two lengths. 8x (1 MS/s at 125 kHz) is the usual choice, as
+  well as the C++ default. Otherwise, the block throws an error, rather than
+  producing wrong results.
+
+  **Sizing the window.** The window is the number of new samples that
+  accumulate before the receiver scans again. Therefore, it is the only
+  latency this block adds on top of the duration of a packet, and it is
+  neither an overlap nor related to the airtime of a packet. 0 selects the
+  default of 32 symbols, never below 4096 chips
+  (max(32 * 2**SF, 4096) * samp_rate/bw, which is 128 symbols at SF5 and 64
+  at SF6), sized to run in real time. Low Latency halves it (16
+  symbols, never below 2048 chips), for half the delay at about 1.45x the
+  CPU, while an explicit Window overrides both. A bursty source, such as a
+  LoRa Encoder in a loopback, is delivered about a quarter of a second after
+  each frame anyway, through the idle flush. The idle flush is not a
+  parameter; to turn it off, call set_idle_flush(0) on the block from a
+  Python Snippet.
+
+  More in detail, a frame is delivered between numtaps/2 and
+  window + numtaps/2 samples after its last symbol arrives, where numtaps/2
+  is the hold-back of the channel filter (127 at the default 255
+  taps). With the channel filter off, or at samp_rate = bw without
+  interpolation, where the filter is the identity, the frame is delivered
+  within window samples. Below min_osf, where the block interpolates, the
+  hold-back is at least 63 samples in any case, half the taps of the
+  interpolator. The exact delay within that interval depends on the length
+  of the frame. Larger windows cost latency and save CPU, since every scan
+  re-examines the retained tail; conversely, a smaller window reduces
+  latency at the cost of CPU. For instance, at samp_rate/bw = 8 the
+  32-symbol default runs at about 30-45% of real time on a typical laptop,
+  and 16 symbols at about 1.45x that. Moreover, the block only keeps the
+  signal that is still live (about 24 symbols on an idle channel, or
+  one packet while a packet is arriving), rather than carrying a whole
+  maximum-length frame between windows. Hence, a frame spanning a boundary
+  is still seen whole, without paying a full frame of latency for it.
+
+  Options and their cost, at SF7:
+    channel filter   ~6 dB, one FFT pass over the window
+    soft decision    ~2 dB at every coding rate
+    sync_phases = 4  roughly triples delivery at -17/-18 dB, but about
+                     doubles the decode time, which takes a live receiver
+                     past its real-time budget; prefer auto unless working
+                     offline.
+
+  Auto is 2 from SF7 on, and 4 below. In fact, below SF7 the symbol is short
+  enough that 2 misses the sync word, depending on where the frame lands in
+  the scan grid, and short enough that 4 costs less, in absolute terms, than
+  2 does at SF7.
+
+  **SF5 and SF6 require implicit header mode.** The LoRa header lives in the
+  first SF-2 codewords at CR 4/8, which hold 4*(SF-2) bits, while the header
+  needs 20 bits. SF7 gives exactly 20 bits, SF6 gives 16 and SF5 gives 12;
+  therefore, below SF7 there is no room for it, which is also why the SX1276
+  datasheet mandates implicit header at SF6. Hence, set Implicit Header and
+  provide the Payload Length; otherwise, the block throws an error at SF5
+  and SF6.
+
+  **Pseudo-header.** By default, the payload carries the 4-byte
+  DST/SRC/SEQNO/LENGTH prefix of SDR-LoRa, inherited from the original
+  SDR-LoRa release. This prefix is not part of LoRa, i.e., on air it is
+  ordinary payload. Hence, turn it off to interoperate with other devices:
+  for instance, a standard frame from gr-lora_sdr (tapparelj) decodes
+  byte-exactly with it off, and not at all with it on, since its first four
+  payload bytes are taken as the prefix.
+  Moreover, turning it off saves 4 bytes of airtime, while src/dst/seqn are
+  reported as -1.
+
+  Note that both ends must agree, since nothing on air tells which framing a
+  frame uses. With the pseudo-header off, a prefixed frame arrives with the
+  four prefix bytes at the start of the message. Conversely, with it on,
+  standard frames are dropped, except for the rare one whose fourth byte
+  equals its length or 0, which arrives with its first bytes taken as the
+  prefix.
+
+  **Invert IQ.** It swaps I and Q, which at complex baseband is equivalent
+  to conjugating the frame, as the SX127x InvertIQ setting does. Therefore,
+  every chirp reverses its direction: the preamble sweeps down and the
+  Start Frame Delimiter (SFD) up. This is the polarity of a LoRaWAN
+  downlink: gateways transmit inverted and listen normal, while end devices
+  do the opposite, so that neither hears its own kind. An inverted frame
+  does not decode as a normal one, and vice versa; since this separation is
+  the goal of the setting, both ends of a link must agree on it.
+
+file_format: 1

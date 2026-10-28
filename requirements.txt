@@ -1,0 +1,7 @@
+# The PHY (lora.py, lora_utils.py): NumPy only, 1.23 or later, NumPy 2
+# included.
+numpy>=1.23
+
+# The USRP transceiver layer (lora_transceiver.py) also needs the UHD Python
+# bindings, which are installed with the UHD driver and are not on PyPI:
+#   https://files.ettus.com/manual/page_python.html

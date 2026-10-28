@@ -1,0 +1,8 @@
+# What goes into the Python source distribution: the three modules (from
+# pyproject.toml), and these. The GNU Radio module is built with CMake from
+# a clone, not installed with pip.
+include LICENSE
+include README.md
+include CITATION.cff
+include requirements.txt
+prune gr-sdrlora

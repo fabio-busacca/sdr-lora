@@ -1,0 +1,57 @@
+[build-system]
+# >=77 understands the SPDX license expression below.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdr-lora"
+version = "2.0.0"
+description = "A complete LoRa PHY (encoder + decoder) in pure NumPy, validated against commercial silicon, for software-defined radios"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+# Ordered as CITATION.cff's software `authors:` block and the 2024
+# Computer Networks article's byline.
+authors = [
+    { name = "Fabio Busacca" },
+    { name = "Stefano Mangione" },
+    { name = "Sergio Palazzo" },
+    { name = "Francesco Restuccia" },
+    { name = "Ilenia Tinnirello" },
+]
+keywords = ["lora", "sdr", "usrp", "css", "chirp-spread-spectrum", "iot", "phy"]
+classifiers = [
+    # Deliberately not published on PyPI: the module is named `lora`, and an
+    # unrelated PyPI project already owns that import name. This classifier
+    # makes PyPI refuse an accidental upload.
+    "Private :: Do Not Upload",
+    "Intended Audience :: Science/Research",
+    "Development Status :: 4 - Beta",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Communications :: Ham Radio",
+    "Topic :: Scientific/Engineering",
+]
+# The PHY (lora.py, lora_utils.py) needs nothing but NumPy. The USRP layer
+# (lora_transceiver.py) also needs the UHD Python bindings, which ship with
+# the UHD driver and are not installable from PyPI:
+# https://files.ettus.com/manual/page_python.html
+dependencies = ["numpy>=1.23"]
+
+[project.urls]
+Homepage = "https://github.com/fabio-busacca/sdr-lora"
+Source = "https://github.com/fabio-busacca/sdr-lora"
+Paper = "https://doi.org/10.1016/j.comnet.2024.110194"
+"Paper (workshop)" = "https://doi.org/10.1145/3556564.3558239"
+Container = "https://zenodo.org/record/7520494"
+Issues = "https://github.com/fabio-busacca/sdr-lora/issues"
+
+[tool.setuptools]
+py-modules = ["lora", "lora_utils", "lora_transceiver"]

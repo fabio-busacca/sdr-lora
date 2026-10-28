@@ -1,0 +1,229 @@
+options:
+  parameters:
+    author: SDR-LoRa
+    catch_exceptions: 'True'
+    category: '[GRC Hier Blocks]'
+    cmake_opt: ''
+    comment: ''
+    copyright: ''
+    description: 'LoRa receiver: it decodes standard LoRa frames at SF7 and 125 kHz,
+      and prints each packet as text, together with its metadata.'
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: lora_rx_hackrf
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: LoRa receiver (HackRF)
+    window_size: (1000,1000)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    state: enabled
+
+blocks:
+- name: bw
+  id: variable
+  parameters:
+    comment: ''
+    value: 125e3
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [320, 8]
+    state: enabled
+- name: freq
+  id: variable
+  parameters:
+    comment: ''
+    value: 868.1e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [540, 8]
+    state: enabled
+- name: samp_rate
+  id: variable
+  parameters:
+    comment: ''
+    value: 2e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [200, 8]
+    state: enabled
+- name: sf
+  id: variable
+  parameters:
+    comment: ''
+    value: '7'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [440, 8]
+    state: enabled
+- name: qtgui_waterfall_sink_x_0
+  id: qtgui_waterfall_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    axislabels: 'True'
+    bw: samp_rate
+    color1: '0'
+    color10: '0'
+    color2: '0'
+    color3: '0'
+    color4: '0'
+    color5: '0'
+    color6: '0'
+    color7: '0'
+    color8: '0'
+    color9: '0'
+    comment: ''
+    fc: freq
+    fftsize: '1024'
+    freqhalf: 'True'
+    grid: 'False'
+    gui_hint: ''
+    int_max: '10'
+    int_min: '-140'
+    label1: ''
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"LoRa channel"'
+    nconnections: '1'
+    showports: 'False'
+    type: complex
+    update_time: '0.10'
+    wintype: window.WIN_BLACKMAN_hARRIS
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [360, 360]
+    state: enabled
+- name: sdrlora_decoder_0
+  id: sdrlora_decoder
+  parameters:
+    affinity: ''
+    alias: ''
+    bw: bw
+    center_freq: freq
+    channel_filter_rx: 'True'
+    comment: ''
+    cr: '1'
+    cutoff_ratio: '1.15'
+    fec_correct: 'True'
+    has_crc: 'True'
+    hop_freqs: '[]'
+    hop_period: '0'
+    implicit_header: 'False'
+    interp_target_osf: '4'
+    interpolate: 'True'
+    invert_iq: 'False'
+    ldro: '2'
+    low_latency: 'False'
+    max_payload_len: '251'
+    maxoutbuf: '0'
+    min_osf: '2'
+    minoutbuf: '0'
+    numtaps: '255'
+    payload_len: '0'
+    pseudo_header: 'False'
+    report_crc_errors: 'False'
+    robust_sync: 'True'
+    samp_rate: samp_rate
+    search_tail_symbols: '24'
+    sf: sf
+    soft_decision: 'True'
+    sync_phases: '0'
+    sync_threshold: '5.5'
+    sync_word: '[0x12]'
+    trise: 50e-6
+    window: '0'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [360, 140]
+    state: enabled
+- name: sdrlora_packet_print_0
+  id: sdrlora_packet_print
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: ''
+    label: ''
+    show_hex: 'False'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [690, 180]
+    state: enabled
+- name: soapy_hackrf_source_0
+  id: soapy_hackrf_source
+  parameters:
+    affinity: ''
+    alias: ''
+    amp: 'False'
+    bandwidth: '0'
+    center_freq: freq
+    comment: ''
+    dev_args: ''
+    gain: '16'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: samp_rate
+    type: fc32
+    vga: '16'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 160]
+    state: enabled
+
+connections:
+- [sdrlora_decoder_0, pdus, sdrlora_packet_print_0, pdus]
+- [soapy_hackrf_source_0, '0', qtgui_waterfall_sink_x_0, '0']
+- [soapy_hackrf_source_0, '0', sdrlora_decoder_0, '0']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.9.2

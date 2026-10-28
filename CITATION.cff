@@ -1,0 +1,76 @@
+# GitHub reads this file and renders a "Cite this repository" button in the
+# sidebar. `preferred-citation` is what that button hands people, so it points
+# at the journal article rather than at the software entry below.
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite the journal article in
+  preferred-citation below.
+title: SDR-LoRa
+abstract: >-
+  An open-source, full-fledged implementation of the LoRa physical layer for
+  software-defined radios: encoder and decoder in pure NumPy, plus a bit-exact
+  C++ port with GNU Radio blocks. Both implementations produce identical
+  waveforms, agree packet for packet, decode commercial LoRa silicon and
+  interoperate with gr-lora_sdr.
+type: software
+authors:
+  - family-names: Busacca
+    given-names: Fabio
+  - family-names: Mangione
+    given-names: Stefano
+  - family-names: Palazzo
+    given-names: Sergio
+  - family-names: Restuccia
+    given-names: Francesco
+  - family-names: Tinnirello
+    given-names: Ilenia
+repository-code: https://github.com/fabio-busacca/sdr-lora
+license: GPL-3.0-only
+# `version` and `date-released` matter because cffconvert DROPS
+# preferred-citation when it emits a Zenodo deposition -- without these the
+# archive record would have no version, no date, and no link to the paper.
+version: 2.0.0
+date-released: '2026-10-28'
+identifiers:
+  - type: doi
+    value: 10.1016/j.comnet.2024.110194
+    description: The journal article describing this implementation
+  - type: doi
+    value: 10.1145/3556564.3558239
+    description: The earlier workshop paper
+keywords:
+  - LoRa
+  # Deliberately NOT LoRaWAN: this is a PHY, and there is no LoRaWAN MAC here.
+  # The sync word 0x34 and the inverted-IQ downlink polarity are supported, so
+  # LoRaWAN-format frames can be produced and received, but nothing above the
+  # physical layer is implemented.
+  - software-defined radio
+  - chirp spread spectrum
+  - physical layer
+  - GNU Radio
+  - IoT
+preferred-citation:
+  type: article
+  title: >-
+    SDR-LoRa, an open-source, full-fledged implementation of LoRa on
+    Software-Defined-Radios: Design and potential exploitation
+  authors:
+    - family-names: Busacca
+      given-names: Fabio
+    - family-names: Mangione
+      given-names: Stefano
+    - family-names: Palazzo
+      given-names: Sergio
+    - family-names: Restuccia
+      given-names: Francesco
+    - family-names: Tinnirello
+      given-names: Ilenia
+  journal: Computer Networks
+  volume: 241
+  start: 110194
+  year: 2024
+  month: 3
+  issn: 1389-1286
+  doi: 10.1016/j.comnet.2024.110194
+  publisher:
+    name: Elsevier
