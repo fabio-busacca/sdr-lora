@@ -35,9 +35,6 @@ identifiers:
   - type: doi
     value: 10.1016/j.comnet.2024.110194
     description: The journal article describing this implementation
-  - type: doi
-    value: 10.1145/3556564.3558239
-    description: The earlier workshop paper
 keywords:
   - LoRa
   # Deliberately NOT LoRaWAN: this is a PHY, and there is no LoRaWAN MAC here.

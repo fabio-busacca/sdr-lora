@@ -397,22 +397,7 @@ SDR-LoRa supports Python 3.9 and later, and NumPy 1.23 and later, including NumP
 
 ## Citing
 
-Please cite the journal article, as reported at the top of this page. The earlier workshop paper describes the original design:
-
-```bibtex
-@inproceedings{busacca2022sdrlora,
-  title     = {Dissecting and Implementing {LoRa} on Software-Defined Radios
-               to Advance Experimental {IoT} Research},
-  author    = {Busacca, Fabio and Mangione, Stefano and Tinnirello, Ilenia and
-               Palazzo, Sergio and Restuccia, Francesco},
-  booktitle = {Proceedings of the 16th ACM Workshop on Wireless Network
-               Testbeds, Experimental Evaluation \& Characterization (WiNTECH)},
-  year      = {2022},
-  doi       = {10.1145/3556564.3558239}
-}
-```
-
-Moreover, `CITATION.cff` carries the record of the journal article, so that the **Cite this repository** button of GitHub returns it, in both APA and BibTeX formats.
+Please cite the journal article, as reported at the top of this page. Moreover, `CITATION.cff` carries its record, so that the **Cite this repository** button of GitHub returns it, in both APA and BibTeX formats.
 
 ## License
 
