@@ -3,9 +3,35 @@
 ### <sup>1</sup>Department of Engineering, University of Palermo, Italy
 ### <sup>2</sup>Department of Electrical, Electronics and Computer Engineering (DIEEI), University of Catania, Italy
 ### <sup>3</sup>Institute for the Wireless Internet of Things, Northeastern University, Boston, USA
-### Journal Paper: Busacca, F., Mangione, S., Palazzo, S., Restuccia, F., & Tinnirello, I. (2024). SDR-LoRa, an open-source, full-fledged implementation of LoRa on Software-Defined-Radios: Design and potential exploitation. Computer Networks, 241, 110194. https://doi.org/10.1016/j.comnet.2024.110194
-### Conference Paper: Busacca, F., Mangione, S., Tinnirello, I., Palazzo, S., & Restuccia, F. (2022, October). SDR-LoRa: dissecting and implementing LoRa on software-defined radios to advance experimental IoT research. In Proceedings of the 16th ACM Workshop on Wireless Network Testbeds, Experimental evaluation & CHaracterization (pp. 24-31). https://dl.acm.org/doi/pdf/10.1145/3556564.3558239
+### Paper Link: https://doi.org/10.1016/j.comnet.2024.110194
 ### Plug-and-play Colosseum Container: https://zenodo.org/record/7520494
+
+**Please cite this research as:**
+
+Busacca, F., Mangione, S., Palazzo, S., Restuccia, F., & Tinnirello, I. (2024). SDR-LoRa, an open-source, full-fledged implementation of LoRa on Software-Defined-Radios: Design and potential exploitation. *Computer Networks*, 241, 110194. https://doi.org/10.1016/j.comnet.2024.110194
+
+```bibtex
+@article{busacca2024sdrlora,
+  title    = {{SDR-LoRa}, an open-source, full-fledged implementation of
+              {LoRa} on {Software-Defined-Radios}: Design and potential
+              exploitation},
+  author   = {Busacca, Fabio and Mangione, Stefano and Palazzo, Sergio and
+              Restuccia, Francesco and Tinnirello, Ilenia},
+  journal  = {Computer Networks},
+  volume   = {241},
+  pages    = {110194},
+  year     = {2024},
+  issn     = {1389-1286},
+  doi      = {10.1016/j.comnet.2024.110194},
+  publisher = {Elsevier}
+}
+```
+
+The same BibTeX entry can also be exported from the DOI:
+
+```bash
+curl -LH "Accept: application/x-bibtex" https://doi.org/10.1016/j.comnet.2024.110194
+```
 
 In this repository, we provide a complete implementation of the LoRa physical (PHY) layer, i.e., both the encoder and the decoder, written in pure NumPy. More in detail, `lora.py` turns a payload into In-phase and Quadrature (IQ) samples and IQ samples back into packets, without GNU Radio, vendor blocks or compiled dependencies. Therefore, every stage of the waveform is open to inspection and modification.
 
@@ -371,26 +397,7 @@ SDR-LoRa supports Python 3.9 and later, and NumPy 1.23 and later, including NumP
 
 ## Citing
 
-If you use this code, please cite the journal article:
-
-```bibtex
-@article{busacca2024sdrlora,
-  title    = {{SDR-LoRa}, an open-source, full-fledged implementation of
-              {LoRa} on {Software-Defined-Radios}: Design and potential
-              exploitation},
-  author   = {Busacca, Fabio and Mangione, Stefano and Palazzo, Sergio and
-              Restuccia, Francesco and Tinnirello, Ilenia},
-  journal  = {Computer Networks},
-  volume   = {241},
-  pages    = {110194},
-  year     = {2024},
-  issn     = {1389-1286},
-  doi      = {10.1016/j.comnet.2024.110194},
-  publisher = {Elsevier}
-}
-```
-
-The earlier workshop paper describes the original design:
+Please cite the journal article, as reported at the top of this page. The earlier workshop paper describes the original design:
 
 ```bibtex
 @inproceedings{busacca2022sdrlora,
@@ -405,7 +412,7 @@ The earlier workshop paper describes the original design:
 }
 ```
 
-`CITATION.cff` carries the same record, so that the **Cite this repository** button of GitHub returns the journal article.
+Moreover, `CITATION.cff` carries the record of the journal article, so that the **Cite this repository** button of GitHub returns it, in both APA and BibTeX formats.
 
 ## License
 
