@@ -1,6 +1,6 @@
 # gr-sdrlora
 
-gr-sdrlora is a GNU Radio 3.10 out-of-tree module that implements the LoRa physical (PHY) layer in C++. More in detail, it provides three blocks, namely **LoRa Encoder**, **LoRa Decoder** and **LoRa Packet Print**, and makes the PHY itself callable from Python.
+gr-sdrlora is a GNU Radio 3.10 out-of-tree module that implements the LoRa physical (PHY) layer in C++. More in detail, it provides three blocks, namely **LoRa Encoder**, **LoRa Decoder** and **LoRa Packet Print**, makes the PHY itself callable from Python, and installs the PHY as a plain C++ library, which can also be built without GNU Radio (see [C++ library without GNU Radio](#c-library-without-gnu-radio)).
 
 The Digital Signal Processing (DSP) code lives in [`lib/lora_phy.cc`](lib/lora_phy.cc) (transmission), [`lib/lora_rx.cc`](lib/lora_rx.cc) (demodulation and decoding) and [`lib/lora_sync.cc`](lib/lora_sync.cc) (channel filter, preamble search, Carrier Frequency Offset (CFO) estimation and clock tracking). Note that this code has **no GNU Radio dependency**, since the blocks are only a wrapper around it.
 
@@ -161,6 +161,56 @@ iq = np.array(sdrlora.phy_encode(p, list(b"Hello LoRa!")), dtype=np.complex64)
 for pkt in sdrlora.phy_decode(p, iq):
     print(pkt.crc_ok, bytes(pkt.payload))
 ```
+
+## C++ library without GNU Radio
+
+The PHY core is also available as a plain C++ library, `sdrlora-phy`, which only depends on the C++ standard library and can be used from C++11 on. To build and install this library alone, without GNU Radio, pass `-DSDRLORA_ENABLE_GNURADIO=OFF`:
+
+```bash
+cmake -S gr-sdrlora -B build-phy -DSDRLORA_ENABLE_GNURADIO=OFF
+cmake --build build-phy -j$(nproc)
+sudo cmake --install build-phy
+```
+
+By default, the library is static (`libsdrlora-phy.a`), while `-DBUILD_SHARED_LIBS=ON` builds a shared one instead. Note that the full build, with GNU Radio, installs the same library as well. A CMake project then finds it as follows:
+
+```cmake
+find_package(sdrlora-phy 2.0 REQUIRED)
+target_link_libraries(my_app PRIVATE sdrlora::sdrlora-phy)
+```
+
+Without CMake, it is enough to link `-lsdrlora-phy`, e.g., `g++ -std=c++11 my_app.cc -lsdrlora-phy`.
+
+[`examples/cpp/hello_lora.cc`](examples/cpp/hello_lora.cc) encodes "Hello LoRa!", adds noise and decodes it back. Moreover, it is installed to `share/sdrlora/examples/cpp`, together with a `CMakeLists.txt` that builds it against the installed library. Its core is the following:
+
+```cpp
+#include <sdrlora/lora_phy.h>
+#include <sdrlora/lora_rx.h>
+
+gr::sdrlora::tx_params p;                  // SF7, CR 4/5, 125 kHz, 1 MS/s
+p.pseudo_header = false;                   // standard LoRa framing
+const std::vector<uint8_t> msg = {'H', 'i', '!'};
+
+std::vector<std::complex<float> > iq;
+gr::sdrlora::encode(p, msg, iq);           // payload -> IQ samples
+
+for (const gr::sdrlora::rx_result& r : gr::sdrlora::decode_buffer(iq, p))
+    if (r.crc_ok)
+        std::printf("%zu bytes received\n", r.payload.size());
+```
+
+Everything lives in the `gr::sdrlora` namespace (the same as the GNU Radio module), and an invalid parameter throws `std::invalid_argument`, with a message that names it. The table below describes the main types and functions.
+
+| Type / function | What it does |
+|---|---|
+| `tx_params` | All the PHY parameters, for both transmission and reception, with the same meaning and defaults as the block parameters above. The fields are `SF`, `cr`, `bw`, `fs`, `f0`, `has_crc`, `implicit_header`, `preamble_symbols`, `src`, `dst`, `seqn`, `pseudo_header`, `sync_word`, `ldro`, `invert_iq`, `cfo_ppm`, `lead_in`, `amplitude`, `trise`, `t0_frac`, `phi0`, `hop_period` and `hop_freqs`, plus `center_freq`, `cutoff_ratio`, `numtaps`, `sync_threshold`, `search_tail_symbols`, `min_osf` and `interp_target_osf` for reception. Note that the sample rate is `fs`, and the spreading factor `SF`. |
+| `encode(p, msg, out)` | Validates `p`, and writes into `out` the IQ samples of the frame carrying `msg`. |
+| `decode_buffer(in, p, channel_filter_rx, robust_sync, sync_phases, soft_decision, implicit_header, ih_payload_len, fec_correct, interpolate, report_crc_errors)` | Scans a buffer and returns a `std::vector<rx_result>` with every packet found. All the flags but `p` are optional, with the same meaning and defaults as the decoder block parameters. In implicit-header mode, `ih_payload_len`, `p.cr` and `p.has_crc` must match the transmitter. |
+| `rx_result` | One decoded packet: `crc_ok`, `hdr_ok`, `has_crc`, `cr`, `payload`, `src`/`dst`/`seqn` (−1 without the pseudo-header), `length`, `truncated`, and `gap_score` (the noise check of frames without a CRC). |
+| `channel_filter(in, bw, fs, out, cutoff_ratio = 1.15, numtaps = 255)` | The receive filter on its own. |
+| `ldro_enabled`, `default_lead_in`, `default_sync_phases`, `sync_word_symbols`, `max_packet_symbols` | Whether LDRO is enabled for a configuration, the automatic lead-in and `sync_phases`, the two symbols of a sync word, and the length of the longest frame in symbols. |
+
+**Streaming.** `decode_buffer` also supports a stream fed buffer by buffer. More in detail, through its optional `consumed_out` argument it reports how many samples the caller can drop, while `search_from` and `walk_end` resume a scan where the previous one stopped. The LoRa Decoder block builds on this contract; however, a C++-only application has to keep the rolling buffer itself.
 
 ## Interoperability with other LoRa implementations
 

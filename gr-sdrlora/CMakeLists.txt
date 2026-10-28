@@ -1,6 +1,6 @@
 # Copyright 2024 SDR-LoRa contributors. SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.16)
-project(gr-sdrlora CXX C)
+project(gr-sdrlora VERSION 2.0.0 LANGUAGES CXX C)
 
 # GNU Radio 3.10's headers need C++17, so the installable module is built at
 # 17. The PHY CORE (lora_phy, lora_rx, lora_sync) is deliberately written to
@@ -22,10 +22,19 @@ endif()
 # gnuradio-blocks would configure and build cleanly and then fail with an
 # ImportError the first time a flowgraph is run, which is a much worse place
 # to learn about a missing dependency than configure time.
+# OFF builds only the C++ PHY library, sdrlora-phy, with no GNU Radio.
+option(SDRLORA_ENABLE_GNURADIO
+       "Build the GNU Radio blocks and their Python bindings" ON)
+if(SDRLORA_ENABLE_GNURADIO)
 find_package(Gnuradio "3.10" REQUIRED COMPONENTS blocks)
 find_package(pybind11 QUIET)
+else()
+    message(STATUS "SDRLORA_ENABLE_GNURADIO is OFF: building the C++ PHY library only")
+endif()
 
 include(GNUInstallDirs)
+
+if(SDRLORA_ENABLE_GNURADIO)
 
 ########################################################################
 # Can a GNU Radio header actually be included?
@@ -113,14 +122,64 @@ if(NOT SDRLORA_GR_HEADERS_USABLE)
         "In a development checkout, `bash test/diagnose_env.sh` run from the "
         "failing shell prints a full report.")
 endif()
+endif()  # SDRLORA_ENABLE_GNURADIO
 
 ########################################################################
 # The PHY core and the GNU Radio blocks
 ########################################################################
-add_library(gnuradio-sdrlora SHARED
+# The PHY core is compiled once: the C++ library sdrlora-phy and the GNU
+# Radio module are both built from these objects.
+add_library(sdrlora_phy_objects OBJECT
     lib/lora_phy.cc
     lib/lora_rx.cc
-    lib/lora_sync.cc
+    lib/lora_sync.cc)
+set_target_properties(sdrlora_phy_objects PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
+target_include_directories(sdrlora_phy_objects
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+
+# The C++ PHY library: no GNU Radio, usable from C++11 on. Static unless
+# BUILD_SHARED_LIBS is set. find_package(sdrlora-phy) finds it once
+# installed, as the target sdrlora::sdrlora-phy.
+add_library(sdrlora-phy $<TARGET_OBJECTS:sdrlora_phy_objects>)
+add_library(sdrlora::sdrlora-phy ALIAS sdrlora-phy)
+target_include_directories(sdrlora-phy
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_compile_features(sdrlora-phy PUBLIC cxx_std_11)
+set_target_properties(sdrlora-phy PROPERTIES
+    LINKER_LANGUAGE CXX
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR})
+install(TARGETS sdrlora-phy EXPORT sdrlora-phy-targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES include/sdrlora/lora_phy.h
+              include/sdrlora/lora_rx.h
+              include/sdrlora/lora_tables.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sdrlora)
+install(EXPORT sdrlora-phy-targets
+        NAMESPACE sdrlora::
+        FILE sdrlora-phyConfig.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdrlora-phy)
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/sdrlora-phyConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sdrlora-phyConfigVersion.cmake"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdrlora-phy)
+
+# The C++ example, built here so that it is known to compile against the
+# library alone, and installed with its own CMakeLists.txt.
+add_executable(sdrlora_hello examples/cpp/hello_lora.cc)
+target_link_libraries(sdrlora_hello PRIVATE sdrlora-phy)
+install(FILES examples/cpp/hello_lora.cc examples/cpp/CMakeLists.txt
+        DESTINATION share/sdrlora/examples/cpp)
+
+if(SDRLORA_ENABLE_GNURADIO)
+add_library(gnuradio-sdrlora SHARED
+    $<TARGET_OBJECTS:sdrlora_phy_objects>
     lib/encoder_impl.cc
     lib/decoder_impl.cc)
 
@@ -134,8 +193,10 @@ set_target_properties(gnuradio-sdrlora PROPERTIES
 
 install(TARGETS gnuradio-sdrlora
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(DIRECTORY include/sdrlora
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(FILES include/sdrlora/api.h
+              include/sdrlora/decoder.h
+              include/sdrlora/encoder.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sdrlora)
 # Relative DESTINATIONs, so they resolve against CMAKE_INSTALL_PREFIX and
 # the GRC files install under whatever prefix is asked for.
 install(FILES grc/sdrlora_encoder.block.yml
@@ -146,6 +207,7 @@ install(FILES grc/sdrlora_encoder.block.yml
 install(DIRECTORY examples/
         DESTINATION share/sdrlora/examples
         FILES_MATCHING PATTERN "*.grc")
+endif()  # SDRLORA_ENABLE_GNURADIO
 
 ########################################################################
 # Self-checks, built only in a development checkout that has test/.
@@ -214,9 +276,11 @@ set_tests_properties(realtime realtime_selftest PROPERTIES RUN_SERIAL TRUE)
 # may choose: its documented delivery-latency interval has to hold for every
 # chunking, not only for calls of exactly one window. Links the block
 # library, unlike the PHY-only programs above.
+if(SDRLORA_ENABLE_GNURADIO)
 add_executable(sdrlora_cadence test/cadence_main.cc)
 target_link_libraries(sdrlora_cadence PRIVATE gnuradio-sdrlora)
 add_test(NAME block_cadence COMMAND sdrlora_cadence)
+endif()
 else()
     message(STATUS "test/ not present: building the module without its checks")
 endif()
@@ -224,7 +288,7 @@ endif()
 ########################################################################
 # Python bindings (optional)
 ########################################################################
-if(pybind11_FOUND)
+if(SDRLORA_ENABLE_GNURADIO AND pybind11_FOUND)
     pybind11_add_module(sdrlora_python
         python/bindings/python_bindings.cc
         python/bindings/encoder_python.cc
@@ -309,7 +373,7 @@ if(pybind11_FOUND)
     install(FILES python/sdrlora/__init__.py
                   python/sdrlora/packet_print.py
             DESTINATION ${GR_PYTHON_RELDIR}/gnuradio/sdrlora)
-else()
+elseif(SDRLORA_ENABLE_GNURADIO)
     message(STATUS "pybind11 not found: skipping Python bindings")
 endif()
 

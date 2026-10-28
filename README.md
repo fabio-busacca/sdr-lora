@@ -3,18 +3,19 @@
 ### <sup>1</sup>Department of Engineering, University of Palermo, Italy
 ### <sup>2</sup>Department of Electrical, Electronics and Computer Engineering (DIEEI), University of Catania, Italy
 ### <sup>3</sup>Institute for the Wireless Internet of Things, Northeastern University, Boston, USA
-### Paper Link: https://dl.acm.org/doi/pdf/10.1145/3556564.3558239
+### Journal Paper: Busacca, F., Mangione, S., Palazzo, S., Restuccia, F., & Tinnirello, I. (2024). SDR-LoRa, an open-source, full-fledged implementation of LoRa on Software-Defined-Radios: Design and potential exploitation. Computer Networks, 241, 110194. https://doi.org/10.1016/j.comnet.2024.110194
+### Conference Paper: Busacca, F., Mangione, S., Tinnirello, I., Palazzo, S., & Restuccia, F. (2022, October). SDR-LoRa: dissecting and implementing LoRa on software-defined radios to advance experimental IoT research. In Proceedings of the 16th ACM Workshop on Wireless Network Testbeds, Experimental evaluation & CHaracterization (pp. 24-31). https://dl.acm.org/doi/pdf/10.1145/3556564.3558239
 ### Plug-and-play Colosseum Container: https://zenodo.org/record/7520494
 
 In this repository, we provide a complete implementation of the LoRa physical (PHY) layer, i.e., both the encoder and the decoder, written in pure NumPy. More in detail, `lora.py` turns a payload into In-phase and Quadrature (IQ) samples and IQ samples back into packets, without GNU Radio, vendor blocks or compiled dependencies. Therefore, every stage of the waveform is open to inspection and modification.
 
-Moreover, [gr-sdrlora/](gr-sdrlora) provides a bit-exact C++ port of both the transmitter and the receiver, together with GNU Radio 3.10 blocks. The two implementations produce identical waveforms and agree packet by packet. Both of them decode captures from commercial LoRa transceivers, interoperate with gr-lora_sdr in both directions, and have been tested over the air against an SX1276 node at every Spreading Factor (SF) it supports.
+Moreover, [gr-sdrlora/](gr-sdrlora) provides a bit-exact C++ port of both the transmitter and the receiver, usable either as a plain C++ library, without GNU Radio, or through GNU Radio 3.10 blocks. The two implementations produce identical waveforms and agree packet by packet. Both of them decode captures from commercial LoRa transceivers, interoperate with gr-lora_sdr in both directions, and have been tested over the air against an SX1276 node at every Spreading Factor (SF) it supports.
 
 ## What's new in this version
 
 This is a major new release of SDR-LoRa. We have reworked the original encoder and decoder throughout, fixed many defects and heavily extended the suite. In particular:
 
-- **C++ port and GNU Radio 3.10 blocks.** The release includes the LoRa Encoder, LoRa Decoder and LoRa Packet Print blocks, their GNU Radio Companion (GRC) integration, example flowgraphs and Python bindings for the C++ PHY. The waveforms of the C++ encoder are byte-identical to the ones of `lora.py`, and the two receivers agree packet by packet.
+- **C++ port and GNU Radio 3.10 blocks.** The C++ PHY is available as a standalone library (`sdrlora-phy`), with no dependency other than the C++ standard library. Moreover, the release includes the LoRa Encoder, LoRa Decoder and LoRa Packet Print blocks, their GNU Radio Companion (GRC) integration, example flowgraphs and Python bindings for the C++ PHY. The waveforms of the C++ encoder are byte-identical to the ones of `lora.py`, and the two receivers agree packet by packet.
 - **A much stronger receiver.** The Hamming Forward Error Correction (FEC) is now used to correct errors, and soft-decision maximum-likelihood decoding has been added. Moreover, the receiver now includes a channel filter, accumulation-based preamble detection, fine Carrier Frequency Offset (CFO) estimation and sample-clock tracking, with a drift retry for long frames gated by the Cyclic Redundancy Check (CRC). Finally, Low Data Rate Optimization (LDRO) follows the 16 ms rule, with a retry for transmitters that do not.
 - **Interoperability.** Standard LoRa framing (`pseudo_header=False`) works with SX127x nodes and gr-lora_sdr in both directions. In addition, this release supports implicit header in both directions, SF5 and SF6, a configurable sync word, preamble length and LDRO, inverted IQ for LoRaWAN downlinks, frequency hopping, and payloads of up to 255 bytes.
 - **Measurement support.** `report_crc_errors` provides Packet Error Rate (PER) counts, and a streaming decoder reports each packet exactly once across buffer boundaries. Moreover, frames without a CRC are checked against noise.
@@ -55,7 +56,7 @@ pip install -r requirements.txt
 
 The project is deliberately **not** published on PyPI. In fact, the module is named `lora`, an import name already owned by an unrelated PyPI project, and we prefer to keep the name used in the paper. Hence, install it from a clone (`pip install .` also works).
 
-Driving a USRP through `lora_transceiver.py` also requires the **Python bindings of the USRP Hardware Driver (UHD)**, which ship with the driver and are not available on PyPI (see the [UHD Python API docs](https://files.ettus.com/manual/page_python.html)). For GNU Radio, build the module in [gr-sdrlora/](gr-sdrlora).
+Driving a USRP through `lora_transceiver.py` also requires the **Python bindings of the USRP Hardware Driver (UHD)**, which ship with the driver and are not available on PyPI (see the [UHD Python API docs](https://files.ettus.com/manual/page_python.html)). For GNU Radio, or for the C++ library alone, build the module in [gr-sdrlora/](gr-sdrlora).
 
 ## Quickstart: no radio required
 
@@ -257,7 +258,7 @@ Note that the denominator here is the number of frames *detected*. In fact, a fr
 
 ## GNU Radio blocks
 
-Every PHY parameter is exposed in GRC; [gr-sdrlora/README.md](gr-sdrlora/README.md) describes how to build and install the module. Moreover, [gr-sdrlora/examples](gr-sdrlora/examples) contains ready-to-run flowgraphs: a loopback that needs no radio, and transmitters and receivers for a USRP and a HackRF.
+Every PHY parameter is exposed in GRC; [gr-sdrlora/README.md](gr-sdrlora/README.md) describes how to build and install the module, as well as how to use the C++ library without GNU Radio. Moreover, [gr-sdrlora/examples](gr-sdrlora/examples) contains ready-to-run flowgraphs: a loopback that needs no radio, and transmitters and receivers for a USRP and a HackRF.
 
 **LoRa Encoder**: `sf`, `cr`, `bw`, `samp_rate`, `f0`, `has_crc`, `implicit_header`, `preamble_symbols`, `src`, `dst`, `pseudo_header`, `seqn` (initial sequence number), `cfo_ppm`, `sync_word`, `ldro`, `lead_in`, `invert_iq`, `trise`, `t0_frac`, `phi0`, `amplitude`, `hop_period`, `hop_freqs` and `burst_tail` (zeros closing each burst: -1, the default, clears a downstream filter, while 0 suits a radio).
 
